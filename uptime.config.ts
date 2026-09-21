@@ -9,7 +9,7 @@ const pageConfig: PageConfig = {
   ],
   group: {
     Public: ['nine_router_api', 'transactions'],
-    Infrastructure: ['beszel_hub'],
+    Infrastructure: ['beszel_hub', 'beszel_main_live', 'beszel_main_systems'],
   },
 }
 
@@ -40,6 +40,24 @@ const workerConfig: WorkerConfig = {
       expectedCodes: [200],
       timeout: 5000,
       responseKeyword: '"code":200',
+    },
+    {
+      id: 'beszel_main_live',
+      name: 'Main VPS Heartbeat',
+      method: 'GET',
+      target: 'https://beszel-heartbeat.nguyenviettuanbp.workers.dev/status/beszel-main/live',
+      expectedCodes: [200],
+      timeout: 5000,
+      responseKeyword: 'healthy',
+    },
+    {
+      id: 'beszel_main_systems',
+      name: 'Beszel Systems',
+      method: 'GET',
+      target: 'https://beszel-heartbeat.nguyenviettuanbp.workers.dev/status/beszel-main/systems',
+      expectedCodes: [200],
+      timeout: 5000,
+      responseKeyword: 'healthy',
     },
   ],
   notification: {
