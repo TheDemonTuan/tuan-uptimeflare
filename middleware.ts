@@ -3,6 +3,15 @@ import type { NextRequest } from 'next/server'
 import { workerConfig } from './uptime.config'
 
 export async function middleware(request: NextRequest) {
+  const host = request.headers.get('host') || ''
+  if (host.toLowerCase().endsWith('.pages.dev')) {
+    const url = request.nextUrl.clone()
+    url.host = 'status.tuannguyenviet.site'
+    url.port = ''
+    url.protocol = 'https'
+    return NextResponse.redirect(url, 301)
+  }
+
   const passwordProtection = workerConfig.passwordProtection
   if (passwordProtection) {
     const authHeader = request.headers.get('Authorization')
