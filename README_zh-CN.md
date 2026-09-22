@@ -30,7 +30,7 @@
 
 ## 👀演示
 
-我自己的状态页面（在线演示）：https://uptimeflare.pages.dev/
+我自己的状态页面（在线演示）：https://status.tuannguyenviet.site/
 
 一些截图：
 

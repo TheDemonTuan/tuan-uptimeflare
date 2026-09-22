@@ -39,7 +39,7 @@ New users can deploy directly, while existing users can have a simple auto migra
 
 ## 👀Demo
 
-My status page (Online demo): https://uptimeflare.pages.dev/
+My status page (Online demo): https://status.tuannguyenviet.site/
 
 Some screenshots:
 
