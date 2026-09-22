@@ -56,6 +56,8 @@ jobs:
       - name: Build page
         run: |
           npx @cloudflare/next-on-pages
+        env:
+          NPM_CONFIG_LEGACY_PEER_DEPS: 'true'
 
       - name: Create D1 database and tables
         run: |
