@@ -96,6 +96,48 @@ jobs:
           terraform import cloudflare_workers_cron_trigger.uptimeflare_worker_cron "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/uptimeflare_worker" || echo "WARNING: Cron trigger import failed, continuing..."
           terraform import cloudflare_pages_project.uptimeflare "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/uptimeflare" || echo "WARNING: Pages project import failed, continuing..."
 
+          API_ROOT="https://api.cloudflare.com/client/v4"
+          ZONE_RESP=$(curl -fsS "$API_ROOT/zones?name=tuannguyenviet.site&status=active&per_page=2" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json")
+          ZONE_COUNT=$(echo "$ZONE_RESP" | jq '.result | length')
+          if [ "$ZONE_COUNT" -ne 1 ]; then
+            echo "Expected exactly one active Cloudflare zone for tuannguyenviet.site" >&2
+            exit 1
+          fi
+          ZONE_ID=$(echo "$ZONE_RESP" | jq -r '.result[0].id')
+
+          PAGES_RESP=$(curl -fsS "$API_ROOT/accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/pages/projects/uptimeflare" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json")
+          PAGES_SUBDOMAIN=$(echo "$PAGES_RESP" | jq -r '.result.subdomain // empty' | tr '[:upper:]' '[:lower:]' | sed 's/\.$//')
+
+          DNS_RESP=$(curl -fsS "$API_ROOT/zones/$ZONE_ID/dns_records?name=status.tuannguyenviet.site&per_page=100" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json")
+          DNS_COUNT=$(echo "$DNS_RESP" | jq '.result | length')
+          if [ "$DNS_COUNT" -gt 1 ]; then
+            echo "Refusing to manage status.tuannguyenviet.site: multiple DNS records exist" >&2
+            exit 1
+          elif [ "$DNS_COUNT" -eq 1 ]; then
+            DNS_TYPE=$(echo "$DNS_RESP" | jq -r '.result[0].type')
+            DNS_CONTENT=$(echo "$DNS_RESP" | jq -r '.result[0].content' | tr '[:upper:]' '[:lower:]' | sed 's/\.$//')
+            if [ -z "$PAGES_SUBDOMAIN" ] || [ "$DNS_TYPE" != "CNAME" ] || [ "$DNS_CONTENT" != "$PAGES_SUBDOMAIN" ]; then
+              echo "Refusing to overwrite conflicting DNS for status.tuannguyenviet.site" >&2
+              exit 1
+            fi
+            DNS_RECORD_ID=$(echo "$DNS_RESP" | jq -r '.result[0].id')
+            terraform import cloudflare_dns_record.status "$ZONE_ID/$DNS_RECORD_ID"
+          fi
+
+          DOMAIN_RESP=$(curl -fsS "$API_ROOT/accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/pages/projects/uptimeflare/domains" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json")
+          if echo "$DOMAIN_RESP" | jq -e '.result[]? | select(.name == "status.tuannguyenviet.site")' > /dev/null; then
+            terraform import cloudflare_pages_domain.uptimeflare_status \
+              "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/uptimeflare/status.tuannguyenviet.site"
+          fi
+
           terraform apply -auto-approve -input=false
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
