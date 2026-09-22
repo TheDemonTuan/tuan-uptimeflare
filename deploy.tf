@@ -21,6 +21,12 @@ variable "enable_do_migration" {
   default = false
 }
 
+data "cloudflare_zone" "main" {
+  filter {
+    name = "tuannguyenviet.site"
+  }
+}
+
 resource "cloudflare_d1_database" "uptimeflare_d1" {
   account_id            = var.CLOUDFLARE_ACCOUNT_ID
   name                  = "uptimeflare_d1"
@@ -96,4 +102,21 @@ resource "cloudflare_pages_project" "uptimeflare" {
   build_config = {
     root_dir = "/"
   }
+}
+
+resource "cloudflare_dns_record" "status" {
+  zone_id = data.cloudflare_zone.main.id
+  name    = "status.tuannguyenviet.site"
+  type    = "CNAME"
+  content = cloudflare_pages_project.uptimeflare.subdomain
+  ttl     = 1
+  proxied = true
+}
+
+resource "cloudflare_pages_domain" "uptimeflare_status" {
+  account_id   = var.CLOUDFLARE_ACCOUNT_ID
+  project_name = cloudflare_pages_project.uptimeflare.name
+  name         = "status.tuannguyenviet.site"
+
+  depends_on = [cloudflare_dns_record.status]
 }
