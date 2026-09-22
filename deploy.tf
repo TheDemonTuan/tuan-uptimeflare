@@ -117,25 +117,6 @@ resource "cloudflare_pages_domain" "uptimeflare_status" {
   depends_on = [cloudflare_dns_record.status]
 }
 
-resource "cloudflare_list" "pages_redirects" {
-  account_id  = var.CLOUDFLARE_ACCOUNT_ID
-  name        = "uptimeflare_pages_redirects"
-  description = "Redirect the default Pages hostname to the custom status domain."
-  kind        = "redirect"
-
-  items = [{
-    redirect = {
-      source_url             = "https://uptimeflare-1pk.pages.dev/"
-      target_url             = "https://status.tuannguyenviet.site/"
-      status_code            = 301
-      include_subdomains     = true
-      preserve_path_suffix   = true
-      preserve_query_string  = true
-      subpath_matching       = true
-    }
-  }]
-}
-
 resource "cloudflare_ruleset" "pages_redirects" {
   account_id  = var.CLOUDFLARE_ACCOUNT_ID
   name        = "uptimeflare_pages_redirects"
@@ -146,15 +127,16 @@ resource "cloudflare_ruleset" "pages_redirects" {
   rules = [{
     action = "redirect"
     action_parameters = {
-      from_list = {
-        name = cloudflare_list.pages_redirects.name
-        key  = "http.request.full_uri"
+      from_value = {
+        preserve_query_string = true
+        status_code           = 301
+        target_url = {
+          expression = "concat(\"https://status.tuannguyenviet.site\", http.request.uri.path)"
+        }
       }
     }
-    expression  = "http.request.full_uri in $uptimeflare_pages_redirects"
-    description = "Redirect uptimeflare-1pk.pages.dev/ to status.tuannguyenviet.site/."
+    expression  = "http.host eq \"uptimeflare-1pk.pages.dev\""
+    description = "Redirect uptimeflare-1pk.pages.dev to status.tuannguyenviet.site."
     enabled     = true
   }]
-
-  depends_on = [cloudflare_list.pages_redirects]
 }
