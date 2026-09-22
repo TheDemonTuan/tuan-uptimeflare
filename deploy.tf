@@ -143,10 +143,10 @@ resource "cloudflare_ruleset" "pages_redirects" {
   kind        = "root"
   phase       = "http_request_redirect"
 
-  rules {
+  rules = [{
     action = "redirect"
-    action_parameters {
-      from_list {
+    action_parameters = {
+      from_list = {
         name = cloudflare_list.pages_redirects.name
         key  = "http.request.full_uri"
       }
@@ -154,7 +154,7 @@ resource "cloudflare_ruleset" "pages_redirects" {
     expression  = "http.request.full_uri in $uptimeflare_pages_redirects"
     description = "Redirect uptimeflare-1pk.pages.dev/ to status.tuannguyenviet.site/."
     enabled     = true
-  }
+  }]
 
   depends_on = [cloudflare_list.pages_redirects]
 }
