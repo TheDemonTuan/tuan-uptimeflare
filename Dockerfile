@@ -6,8 +6,8 @@ WORKDIR /app
 COPY package*.json ./
 COPY worker/package*.json ./worker/
 
-RUN npm ci
-RUN cd worker && npm ci
+RUN npm ci --legacy-peer-deps
+RUN cd worker && npm ci --legacy-peer-deps
 
 # Copy all source files
 COPY . .
