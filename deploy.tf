@@ -125,8 +125,8 @@ resource "cloudflare_list" "pages_redirects" {
 
   items = [{
     redirect = {
-      source_url             = "https://uptimeflare-1pk.pages.dev"
-      target_url             = "https://status.tuannguyenviet.site"
+      source_url             = "https://uptimeflare-1pk.pages.dev/"
+      target_url             = "https://status.tuannguyenviet.site/"
       status_code            = 301
       include_subdomains     = true
       preserve_path_suffix   = true
@@ -152,7 +152,7 @@ resource "cloudflare_ruleset" "pages_redirects" {
       }
     }
     expression  = "http.request.full_uri in $uptimeflare_pages_redirects"
-    description = "Redirect uptimeflare-1pk.pages.dev to status.tuannguyenviet.site."
+    description = "Redirect uptimeflare-1pk.pages.dev/ to status.tuannguyenviet.site/."
     enabled     = true
   }
 
