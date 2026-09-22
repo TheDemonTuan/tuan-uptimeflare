@@ -44,9 +44,9 @@ jobs:
 
       - name: Install packages
         run: |
-          npm install
+          npm ci --legacy-peer-deps
           cd worker
-          npm install
+          npm ci --legacy-peer-deps
 
       - name: Build worker
         run: |
