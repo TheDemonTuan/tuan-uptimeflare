@@ -143,23 +143,6 @@ jobs:
               "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/uptimeflare/status.tuannguyenviet.site"
           fi
 
-          REDIRECT_RULESETS=$(curl -fsS "$API_ROOT/accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/rulesets?phase=http_request_redirect&per_page=50" \
-            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            -H "Content-Type: application/json")
-          ROOT_REDIRECT_COUNT=$(echo "$REDIRECT_RULESETS" | jq '[.result[]? | select(.kind == "root" and .phase == "http_request_redirect")] | length')
-          if [ "$ROOT_REDIRECT_COUNT" -gt 1 ]; then
-            echo "Refusing to manage account with multiple http_request_redirect root rulesets" >&2
-            exit 1
-          elif [ "$ROOT_REDIRECT_COUNT" -eq 1 ]; then
-            ROOT_REDIRECT_NAME=$(echo "$REDIRECT_RULESETS" | jq -r '.result[] | select(.kind == "root" and .phase == "http_request_redirect") | .name')
-            if [ "$ROOT_REDIRECT_NAME" != "uptimeflare_pages_redirects" ]; then
-              echo "Refusing to overwrite existing http_request_redirect ruleset: $ROOT_REDIRECT_NAME" >&2
-              exit 1
-            fi
-            ROOT_REDIRECT_ID=$(echo "$REDIRECT_RULESETS" | jq -r '.result[] | select(.kind == "root" and .phase == "http_request_redirect") | .id')
-            terraform import cloudflare_ruleset.pages_redirects "accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/$ROOT_REDIRECT_ID"
-          fi
-
           terraform apply -auto-approve -input=false
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
