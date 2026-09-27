@@ -1,0 +1,26 @@
+name: Validate dependencies
+
+on:
+  pull_request:
+    paths:
+      - package.json
+      - package-lock.json
+      - .github/workflows/validate-dependencies.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - run: npm audit --audit-level=low
+      - run: npx @cloudflare/next-on-pages
+        env:
+          NPM_CONFIG_LEGACY_PEER_DEPS: 'true'
