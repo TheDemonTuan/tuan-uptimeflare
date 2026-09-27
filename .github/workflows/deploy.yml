@@ -99,25 +99,9 @@ jobs:
             export TF_VAR_enable_do_migration=true
           fi
 
-          import_resource() {
-            local res="$1"
-            local id="$2"
-            local check_url="$3"
-            local status
-            status=$(curl -s -o /dev/null -w "%{http_code}" "$check_url" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
-            if [ "$status" = "200" ]; then
-              terraform import "$res" "$id"
-            elif [ "$status" = "404" ]; then
-              echo "$res does not exist yet; will create."
-            else
-              echo "Failed to verify $res (HTTP $status)"
-              exit 1
-            fi
-          }
-
-          import_resource "cloudflare_workers_script.uptimeflare_worker" "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/uptimeflare_worker" "https://api.cloudflare.com/client/v4/accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/workers/scripts/uptimeflare_worker"
-          import_resource "cloudflare_workers_cron_trigger.uptimeflare_worker_cron" "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/uptimeflare_worker" "https://api.cloudflare.com/client/v4/accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/workers/scripts/uptimeflare_worker/schedules"
-
+          echo "Try importing existing resources..."
+          terraform import cloudflare_workers_script.uptimeflare_worker "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/uptimeflare_worker" || echo "WARNING: Worker script import failed, continuing..."
+          terraform import cloudflare_workers_cron_trigger.uptimeflare_worker_cron "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/uptimeflare_worker" || echo "WARNING: Cron trigger import failed, continuing..."
           terraform plan -out=tfplan.binary -input=false
           terraform show -json tfplan.binary > tfplan.json
           python3 deploy/validate_plan.py tfplan.json

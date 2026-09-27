@@ -70,14 +70,6 @@ variable "TELEGRAM_CHAT_ID" {
   }
 }
 
-data "cloudflare_zone" "main" {
-  filter = {
-    name = "tuannguyenviet.site"
-  }
-  lifecycle {
-    prevent_destroy = true
-  }
-}
 
 resource "cloudflare_workers_script" "uptimeflare_worker" {
   account_id          = var.CLOUDFLARE_ACCOUNT_ID
