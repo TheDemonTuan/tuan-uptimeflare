@@ -2,6 +2,12 @@ import { Env } from '.'
 import { MonitorTarget } from '../../types/config'
 import { withTimeout, fetchTimeout } from './util'
 
+const protectedTargets: Record<string, string> = {
+  nine_router_admin: 'https://9router-admin.tuannguyenviet.site/dashboard',
+  nine_router_storage: 'https://9router-admin.tuannguyenviet.site/api/monitor/ready',
+  beszel_hub: 'https://beszel.tuannguyenviet.site/api/health',
+}
+
 function isIpAddress(hostname: string): boolean {
   // `URL.hostname` strips brackets for IPv6, so a `:` reliably indicates an IPv6 literal here.
   if (hostname.includes(':')) return true
@@ -29,13 +35,14 @@ async function httpResponseBasicCheck(
   code: number,
   bodyReader: () => Promise<string>
 ): Promise<string | null> {
+  const protectedCheck = monitor.id in protectedTargets
   if (monitor.expectedCodes) {
     if (!monitor.expectedCodes.includes(code)) {
-      return `Expected codes: ${JSON.stringify(monitor.expectedCodes)}, Got: ${code}`
+      return protectedCheck ? 'Protected check failed' : `Expected codes: ${JSON.stringify(monitor.expectedCodes)}, Got: ${code}`
     }
   } else {
     if (code < 200 || code > 299) {
-      return `Expected codes: 2xx, Got: ${code}`
+      return protectedCheck ? 'Protected check failed' : `Expected codes: 2xx, Got: ${code}`
     }
   }
 
@@ -43,19 +50,28 @@ async function httpResponseBasicCheck(
     // Only read response body if we have a keyword to check
     const responseBody = await bodyReader()
 
-    console.log(`[${monitor.id}] HTTP check status=${res.status}`)
+    console.log(`[${monitor.id}] HTTP check status=${code}`)
+    // MUST contain responseKeyword
+    if (monitor.responseKeyword && !responseBody.includes(monitor.responseKeyword)) {
+      if (!protectedCheck) {
+        console.log(
+          `${monitor.name} expected keyword not found in response`
+        )
+      }
+      return protectedCheck ? 'Protected check failed' : "HTTP response doesn't contain the configured keyword"
+    }
 
     // MUST NOT contain responseForbiddenKeyword
     if (
       monitor.responseForbiddenKeyword &&
       responseBody.includes(monitor.responseForbiddenKeyword)
     ) {
-      console.log(
-        `${monitor.name} forbidden keyword ${
-          monitor.responseForbiddenKeyword
-        }, found in response (truncated to 100 chars): ${responseBody.slice(0, 100)}`
-      )
-      return 'HTTP response contains the configured forbidden keyword'
+      if (!protectedCheck) {
+        console.log(
+          `${monitor.name} forbidden keyword ${monitor.responseForbiddenKeyword}, found in response (truncated to 100 chars): ${responseBody.slice(0, 100)}`
+        )
+      }
+      return protectedCheck ? 'Protected check failed' : 'HTTP response contains the configured forbidden keyword'
     }
   }
 
@@ -250,6 +266,7 @@ export async function getStatus(
     err: 'Unknown',
   }
 
+  const protectedCheck = monitor.id in protectedTargets
   const startTime = Date.now()
 
   if (monitor.method === 'TCP_PING') {
@@ -296,6 +313,7 @@ export async function getStatus(
             '100-599': -1, // Don't cache any status code, from https://developers.cloudflare.com/workers/runtime-apis/request/#requestinitcfproperties
           },
         },
+        ...(protectedCheck ? { redirect: 'manual' as const } : {}),
       })
 
       console.log(`${monitor.name} responded with ${response.status}`)
@@ -316,14 +334,19 @@ export async function getStatus(
       status.up = err === null
       status.err = err ?? ''
     } catch (e: any) {
-      console.log(`${monitor.name} errored with ${e.name}: ${e.message}`)
-      if (e.name === 'AbortError') {
-        status.ping = monitor.timeout || 10000
+      if (protectedCheck) {
         status.up = false
-        status.err = `Timeout after ${status.ping}ms`
+        status.err = 'Protected check failed'
       } else {
-        status.up = false
-        status.err = e.name + ': ' + e.message
+        console.log(`${monitor.name} errored with ${e.name}: ${e.message}`)
+        if (e.name === 'AbortError') {
+          status.ping = monitor.timeout || 10000
+          status.up = false
+          status.err = `Timeout after ${status.ping}ms`
+        } else {
+          status.up = false
+          status.err = e.name + ': ' + e.message
+        }
       }
     }
   }
@@ -334,6 +357,27 @@ export async function getStatus(
 export async function doMonitor(monitor: MonitorTarget, defaultLocation: string, env: Env) {
   let checkLocation = defaultLocation
   let status
+  if (monitor.id in protectedTargets) {
+    // ponytail: only these exact HTTPS endpoints accept Access credentials; review each new target.
+    const beszel = monitor.id === 'beszel_hub'
+    const clientId = beszel ? env.BESZEL_ACCESS_CLIENT_ID : env.CF_ACCESS_CLIENT_ID
+    const clientSecret = beszel ? env.BESZEL_ACCESS_CLIENT_SECRET : env.CF_ACCESS_CLIENT_SECRET
+    if (monitor.target !== protectedTargets[monitor.id] || monitor.checkProxy !== undefined ||
+        monitor.method !== 'GET' || monitor.body !== undefined || monitor.headers !== undefined ||
+        !clientId || !clientSecret) {
+      const status = { ping: 0, up: false, err: 'Protected check unavailable' }
+      return { id: monitor.id, location: defaultLocation, status }
+    }
+    const status = await getStatus({
+      ...monitor,
+      headers: {
+        'CF-Access-Client-Id': clientId,
+        'CF-Access-Client-Secret': clientSecret,
+      },
+    })
+    return { id: monitor.id, location: defaultLocation, status }
+  }
+
 
   if (monitor.checkProxy) {
     if (!monitor.checkProxy.startsWith('worker://') && !monitor.checkProxy.startsWith('globalping://')) {

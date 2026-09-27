@@ -43,4 +43,6 @@ next-env.d.ts
 .terraform/
 terraform.tfstate*
 
+*.tfvars
+*.tfvars.json
 /.wrangler

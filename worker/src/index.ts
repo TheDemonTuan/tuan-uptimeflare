@@ -9,6 +9,10 @@ import pLimit from 'p-limit'
 export interface Env {
   REMOTE_CHECKER_DO: DurableObjectNamespace<RemoteChecker>
   UPTIMEFLARE_D1: D1Database
+  CF_ACCESS_CLIENT_ID: string
+  CF_ACCESS_CLIENT_SECRET: string
+  BESZEL_ACCESS_CLIENT_ID: string
+  BESZEL_ACCESS_CLIENT_SECRET: string
   TELEGRAM_BOT_TOKEN: string
   TELEGRAM_CHAT_ID: string
 }

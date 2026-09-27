@@ -7,6 +7,23 @@
 
 A more advanced, serverless, and free uptime monitoring & status page solution, powered by Cloudflare Workers, complete with a user-friendly interface.
 
+Production status page: https://status.tuannguyenviet.site
+
+## Production monitoring (this fork)
+
+This repository alone deploys the status Pages site, minute-interval Worker cron, D1 state, and `status.tuannguyenviet.site` DNS through `.github/workflows/deploy.yml`. Beszel owns only Hub/Agent and the producer for `/status/beszel-main/live` and `/status/beszel-main/systems`; it does not deploy this fork.
+
+The `9router` group has four distinct checks: API `/api/health` (liveness), unauthenticated `/v1/models` (401 API-key guard), admin `/dashboard` (verified Access token and dashboard marker), and `/api/monitor/ready` (SQLite settings table availability). The last check does not validate database integrity or AI providers. Transactions remain independent. Beszel Hub checks `/api/health` through Cloudflare Access using a dedicated service token; Beszel Systems checks the public `/status/beszel-main/systems` heartbeat. The dashboard remains protected by Email OTP.
+
+Before merging a monitoring PR, configure a **Service Auth** policy restricted to `9router-admin.tuannguyenviet.site` in Cloudflare Access. Give this application a dedicated service token. Set `CLOUDFLARE_ACCESS_TEAM_NAME` and the actual admin application `CLOUDFLARE_ACCESS_AUD` on the 9router VPS, then deploy 9router and verify authenticated dashboard HTML plus readiness JSON externally. The API hostname remains outside Access. Store the token ID/secret only as GitHub Actions secrets `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` in this fork. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` as two further Actions secrets before deployment. Rotate any previously exposed token instead of reusing it. A DOWN transition sends one Telegram message; recovery and subsequent DOWN reason changes do not send messages. CI rejects missing credentials before Terraform apply.
+
+Beszel Access app `beszel.tuannguyenviet.site` grants Service Auth only to service token `uptimeflare-beszel-hub`, separate from the 9router token. GitHub Actions secrets `BESZEL_ACCESS_CLIENT_ID` and `BESZEL_ACCESS_CLIENT_SECRET` are installed as UptimeFlare Worker bindings by the deployment workflow; rotate the token before it expires on 2027-09-27. `/api/health` remains protected from unauthenticated requests.
+
+Terraform `sensitive` hides printed values but **does not encrypt Terraform state**. Actions use ephemeral state without uploading it. For manual apply, use an access-controlled encrypted remote backend; never commit `*.tfstate`, `*.tfvars`, Access tokens, or Telegram credentials. Keep the existing Cloudflare API token/account ID Actions secrets and D1 ID (`UPTIMEFLARE_D1_ID` repository variable, or workflow discovery). `bun test tests/monitoring.test.ts` tests checks and alerts locally without production tokens.
+
+Dependency overrides in `package.json` patch the legacy `@cloudflare/next-on-pages` toolchain (including Next's bundled PostCSS); `npm audit` and the Linux Pages build run on dependency PRs. ponytail: This remains on Pages/Next 15; migrate the deployment to OpenNext/Workers before upgrading Next or removing the overrides.
+
+
 📢 **[[SECURITY ADVISORY](https://github.com/lyc8503/UptimeFlare/security/advisories/GHSA-36q9-v7p3-vj6v) 2026/03/04]** A vulnerability (CVE-2026-29779) that could expose monitor configuration and credentials in `uptime.config.ts` to clients was fixed. Versions between 2025-09-21 (from commit `41257c6`) and 2026-03-04 are affected. **Affected users are strongly advised to upgrade to the latest version.**
 
 🎉 **[UPDATE 2026/01/03]** I have just migrated UptimeFlare from KV to D1 Database. I also updated the Terraform Cloudflare provider to v5 and improved the deployment process. The data structure has been optimized to resolve long-standing performance issues.
@@ -37,7 +54,7 @@ New users can deploy directly, while existing users can have a simple auto migra
 
 ## 👀Demo
 
-My status page (Online demo): https://uptimeflare.pages.dev/
+My status page (Online demo): https://status.tuannguyenviet.site/
 
 Some screenshots:
 

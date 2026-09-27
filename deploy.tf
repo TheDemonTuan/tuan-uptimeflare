@@ -21,12 +21,43 @@ variable "enable_do_migration" {
   default = false
 }
 
+variable "UPTIMEFLARE_D1_ID" {
+  type = string
+}
+
+variable "CF_ACCESS_CLIENT_ID" {
+  type      = string
+  sensitive = true
+  validation {
+    condition     = length(trimspace(var.CF_ACCESS_CLIENT_ID)) > 0
+    error_message = "CF_ACCESS_CLIENT_ID is required."
+  }
+}
+
+variable "CF_ACCESS_CLIENT_SECRET" {
+  type      = string
+  sensitive = true
+  validation {
+    condition     = length(trimspace(var.CF_ACCESS_CLIENT_SECRET)) > 0
+    error_message = "CF_ACCESS_CLIENT_SECRET is required."
+  }
+}
+
+variable "BESZEL_ACCESS_CLIENT_ID" {
+  type      = string
+  sensitive = true
+}
+
+variable "BESZEL_ACCESS_CLIENT_SECRET" {
+  type      = string
+  sensitive = true
+}
 variable "TELEGRAM_BOT_TOKEN" {
   type      = string
   sensitive = true
   validation {
     condition     = length(trimspace(var.TELEGRAM_BOT_TOKEN)) > 0
-    error_message = "TELEGRAM_BOT_TOKEN must not be empty."
+    error_message = "TELEGRAM_BOT_TOKEN is required."
   }
 }
 
@@ -35,15 +66,13 @@ variable "TELEGRAM_CHAT_ID" {
   sensitive = true
   validation {
     condition     = length(trimspace(var.TELEGRAM_CHAT_ID)) > 0
-    error_message = "TELEGRAM_CHAT_ID must not be empty."
+    error_message = "TELEGRAM_CHAT_ID is required."
   }
 }
 
-resource "cloudflare_d1_database" "uptimeflare_d1" {
-  account_id            = var.CLOUDFLARE_ACCOUNT_ID
-  name                  = "uptimeflare_d1"
-  read_replication = {
-    mode = "auto"
+data "cloudflare_zone" "main" {
+  filter = {
+    name = "tuannguyenviet.site"
   }
   lifecycle {
     prevent_destroy = true
@@ -79,7 +108,23 @@ resource "cloudflare_workers_script" "uptimeflare_worker" {
     }, {
     name = "UPTIMEFLARE_D1"
     type = "d1"
-    id   = cloudflare_d1_database.uptimeflare_d1.id
+    id   = var.UPTIMEFLARE_D1_ID
+    }, {
+    name = "CF_ACCESS_CLIENT_ID"
+    type = "secret_text"
+    text = var.CF_ACCESS_CLIENT_ID
+    }, {
+    name = "CF_ACCESS_CLIENT_SECRET"
+    type = "secret_text"
+    text = var.CF_ACCESS_CLIENT_SECRET
+    }, {
+    name = "BESZEL_ACCESS_CLIENT_ID"
+    type = "secret_text"
+    text = var.BESZEL_ACCESS_CLIENT_ID
+    }, {
+    name = "BESZEL_ACCESS_CLIENT_SECRET"
+    type = "secret_text"
+    text = var.BESZEL_ACCESS_CLIENT_SECRET
     }, {
     name = "TELEGRAM_BOT_TOKEN"
     type = "secret_text"
@@ -99,4 +144,5 @@ resource "cloudflare_workers_cron_trigger" "uptimeflare_worker_cron" {
     cron = "* * * * *" # every 1 minute, you can reduce the write counts by increase the worker settings of `kvWriteCooldownMinutes`
   }]
 }
+
 

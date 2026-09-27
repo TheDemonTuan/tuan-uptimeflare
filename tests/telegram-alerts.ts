@@ -24,8 +24,16 @@ async function main() {
     await onStatusChange(env, monitor, true, 100, 220, 'OK')
     assert.equal(calls.length, 1)
 
-    globalThis.fetch = async () => new Response('{"ok":false}', { status: 403 })
-    await assert.rejects(onStatusChange(env, monitor, false, 300, 300, 'HTTP 503'), /Telegram notification failed: HTTP 403/)
+    const loggedErrors: string[] = []
+    const originalError = console.error
+    console.error = (...args: unknown[]) => { loggedErrors.push(args.join(' ')) }
+    try {
+      globalThis.fetch = async () => new Response('{"ok":false}', { status: 403 })
+      await onStatusChange(env, monitor, false, 300, 300, 'HTTP 503')
+      assert(loggedErrors.some((msg) => msg.includes('Telegram notification failed: HTTP 403')))
+    } finally {
+      console.error = originalError
+    }
     await assert.rejects(onStatusChange({} as typeof env, monitor, false, 400, 400, 'HTTP 503'), /Telegram Worker secrets are missing/)
   } finally {
     globalThis.fetch = originalFetch

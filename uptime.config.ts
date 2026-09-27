@@ -14,6 +14,33 @@ const workerConfig: WorkerConfig = {
       responseKeyword: '"ok":true',
     },
     {
+      id: 'nine_router_auth',
+      name: '9router API Auth',
+      method: 'GET',
+      target: 'https://9router-api.tuannguyenviet.site/v1/models',
+      expectedCodes: [401],
+      responseKeyword: 'API key required for remote API access',
+      timeout: 5000,
+    },
+    {
+      id: 'nine_router_admin',
+      name: '9router Admin',
+      method: 'GET',
+      target: 'https://9router-admin.tuannguyenviet.site/dashboard',
+      expectedCodes: [200],
+      responseKeyword: 'data-monitor="9router-dashboard"',
+      timeout: 10000,
+    },
+    {
+      id: 'nine_router_storage',
+      name: '9router SQLite',
+      method: 'GET',
+      target: 'https://9router-admin.tuannguyenviet.site/api/monitor/ready',
+      expectedCodes: [200],
+      responseKeyword: '"ready":true',
+      timeout: 5000,
+    },
+    {
       id: 'transactions',
       name: 'ACB Transactions',
       method: 'GET',
@@ -30,28 +57,39 @@ const workerConfig: WorkerConfig = {
       timeout: 5000,
       responseKeyword: '"code":200',
     },
+    {
+      id: 'beszel_main_systems',
+      name: 'Beszel Systems',
+      method: 'GET',
+      target: 'https://beszel-heartbeat.tuannguyenviet.site/status/beszel-main/systems',
+      expectedCodes: [200],
+      timeout: 5000,
+      responseKeyword: 'healthy',
+    },
   ],
   callbacks: {
-    onStatusChange: async (env, monitor, isUp, timeIncidentStart, timeNow, reason) => {
-      // Only the first failed check opens an incident; ignore error changes and recovery.
+    async onStatusChange(env, monitor, isUp, timeIncidentStart, timeNow, reason) {
       if (isUp || timeIncidentStart !== timeNow) return
       if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) {
         throw new Error('Telegram Worker secrets are missing')
       }
-      const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-        method: 'POST',
-        body: new URLSearchParams({
-          chat_id: env.TELEGRAM_CHAT_ID,
-          text: `🔴 ${monitor.name} is down. Issue: ${reason || 'unspecified'}`,
-        }),
-        signal: AbortSignal.timeout(5000),
-      }).catch(() => {
-        throw new Error('Telegram request failed')
+      const body = new URLSearchParams({
+        chat_id: env.TELEGRAM_CHAT_ID,
+        text: `${monitor.name} is down; ${reason}`,
       })
-      if (!response.ok) throw new Error(`Telegram notification failed: HTTP ${response.status}`)
+      try {
+        const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body,
+          signal: AbortSignal.timeout(5000),
+        })
+        if (!response.ok) console.error(`Telegram notification failed: HTTP ${response.status}`)
+      } catch {
+        console.error('Telegram notification failed: network or timeout')
+      }
     },
   },
 }
 
 export { workerConfig }
-

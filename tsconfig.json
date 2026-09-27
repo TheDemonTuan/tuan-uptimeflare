@@ -37,6 +37,7 @@
     "worker/**/*.ts",
     "worker/dist",
     ".open-next",
-    ".tmp"
+    ".tmp",
+    "tests/**/*.ts"
   ]
 }

@@ -74,7 +74,7 @@ async function selfCheck() {
   try {
     const env = { UPTIMEFLARE_D1: { prepare: () => ({ bind: () => ({ first: async () => ({ value: stateFor('healthy') }) }) }) } } as unknown as Pick<Env, 'UPTIMEFLARE_D1'>
     const snapshot = await getDashboardSnapshot(env)
-    assert.equal(snapshot.monitors.length, 3)
+    assert.equal(snapshot.monitors.length, ids.length)
     for (const secret of privateFields) assert(!JSON.stringify(snapshot).includes(secret))
   } finally { workerConfig.monitors[0] = original }
   const start = Date.UTC(2026, 8, 26) / 1000
@@ -114,14 +114,14 @@ async function httpCheck(base: string, scenario: string, authenticated: boolean)
   assert.equal(snapshotResponse.status, scenario === 'malformed' ? 500 : 200)
   if (snapshotResponse.ok) {
     const snapshot = await snapshotResponse.json() as { monitors: unknown[]; compactedStateStr: string | null }
-    assert.equal(snapshot.monitors.length, 3)
+    assert.equal(snapshot.monitors.length, ids.length)
     assert.equal(snapshot.compactedStateStr === null, scenario === 'empty')
   }
   const summary = await request('/api/data')
   assert.equal(summary.status, scenario === 'empty' || scenario === 'malformed' ? 500 : 200)
   if (summary.ok) {
     const value = await summary.json() as { up: number; monitors: Record<string, { up: boolean | null }> }
-    assert.equal(value.up, scenario === 'mixed' ? 1 : 3)
+    assert.equal(value.up, scenario === 'mixed' ? 1 : ids.length)
     assert.equal(value.monitors[ids[2]].up, scenario === 'mixed' ? null : true)
   }
   assert.equal((await request('/api/badge')).status, 400)
