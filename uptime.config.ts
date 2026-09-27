@@ -64,10 +64,10 @@ const workerConfig: WorkerConfig = {
       id: 'beszel_hub',
       name: 'Beszel Hub',
       method: 'GET',
-      target: 'https://beszel-heartbeat.tuannguyenviet.site/status/beszel-main/live',
+      target: 'https://beszel.tuannguyenviet.site/api/health',
       expectedCodes: [200],
       timeout: 5000,
-      responseKeyword: 'healthy',
+      responseKeyword: '"code":200',
     },
     {
       id: 'beszel_main_systems',

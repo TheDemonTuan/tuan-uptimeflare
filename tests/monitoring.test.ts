@@ -14,6 +14,7 @@ afterEach(() => {
 const byId = (id: string) => workerConfig.monitors.find(m => m.id === id)!
 const env = {
   CF_ACCESS_CLIENT_ID: 'private-client-id', CF_ACCESS_CLIENT_SECRET: 'private-client-secret',
+  BESZEL_ACCESS_CLIENT_ID: 'beszel-client-id', BESZEL_ACCESS_CLIENT_SECRET: 'beszel-client-secret',
   TELEGRAM_BOT_TOKEN: 'private-bot-token', TELEGRAM_CHAT_ID: 'private-chat',
 } as Env
 
@@ -61,6 +62,27 @@ test('protected credentials only reach exact admin HTTPS targets, never proxy or
   }
   expect((await doMonitor(admin, 'LOCAL', { ...env, CF_ACCESS_CLIENT_SECRET: '' })).status.up).toBe(false)
   expect(sent).toEqual([admin.target])
+})
+
+test('Beszel health requires its own Access token and actual health response', async () => {
+  const hub = byId('beszel_hub')
+  const sent: string[] = []
+  globalThis.fetch = mock(async (url, init) => {
+    sent.push(String(url))
+    expect(init?.redirect).toBe('manual')
+    const headers = new Headers(init?.headers)
+    expect(headers.get('CF-Access-Client-Id')).toBe(env.BESZEL_ACCESS_CLIENT_ID)
+    expect(headers.get('CF-Access-Client-Secret')).toBe(env.BESZEL_ACCESS_CLIENT_SECRET)
+    return new Response('{"code":200}', { status: 200 })
+  }) as typeof fetch
+  expect((await doMonitor(hub, 'LOCAL', env)).status.up).toBe(true)
+  expect((await doMonitor(hub, 'LOCAL', { ...env, BESZEL_ACCESS_CLIENT_SECRET: '' })).status.up).toBe(false)
+  expect((await doMonitor({ ...hub, target: 'https://other.example/api/health' }, 'LOCAL', env)).status.up).toBe(false)
+  expect(sent).toEqual([hub.target])
+  globalThis.fetch = mock(async () => new Response('Access login', { status: 302 })) as typeof fetch
+  expect((await doMonitor(hub, 'LOCAL', env)).status.up).toBe(false)
+  globalThis.fetch = mock(async () => new Response('login', { status: 200 })) as typeof fetch
+  expect((await doMonitor(hub, 'LOCAL', env)).status.up).toBe(false)
 })
 
 test('protected fetch failures cannot expose exception strings', async () => {

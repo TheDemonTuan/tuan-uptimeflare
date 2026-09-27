@@ -5,6 +5,7 @@ import { withTimeout, fetchTimeout } from './util'
 const protectedTargets: Record<string, string> = {
   nine_router_admin: 'https://9router-admin.tuannguyenviet.site/dashboard',
   nine_router_storage: 'https://9router-admin.tuannguyenviet.site/api/monitor/ready',
+  beszel_hub: 'https://beszel.tuannguyenviet.site/api/health',
 }
 
 function isIpAddress(hostname: string): boolean {
@@ -371,18 +372,21 @@ export async function doMonitor(monitor: MonitorTarget, defaultLocation: string,
   let checkLocation = defaultLocation
   let status
   if (monitor.id in protectedTargets) {
-    // ponytail: only these two exact HTTPS endpoints accept Access credentials; add a reviewed target before expanding.
+    // ponytail: only these exact HTTPS endpoints accept Access credentials; review each new target.
+    const beszel = monitor.id === 'beszel_hub'
+    const clientId = beszel ? env.BESZEL_ACCESS_CLIENT_ID : env.CF_ACCESS_CLIENT_ID
+    const clientSecret = beszel ? env.BESZEL_ACCESS_CLIENT_SECRET : env.CF_ACCESS_CLIENT_SECRET
     if (monitor.target !== protectedTargets[monitor.id] || monitor.checkProxy !== undefined ||
         monitor.method !== 'GET' || monitor.body !== undefined || monitor.headers !== undefined ||
-        !env.CF_ACCESS_CLIENT_ID || !env.CF_ACCESS_CLIENT_SECRET) {
+        !clientId || !clientSecret) {
       const status = { ping: 0, up: false, err: 'Protected check unavailable' }
       return { id: monitor.id, location: defaultLocation, status }
     }
     const status = await getStatus({
       ...monitor,
       headers: {
-        'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID,
-        'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET,
+        'CF-Access-Client-Id': clientId,
+        'CF-Access-Client-Secret': clientSecret,
       },
     })
     return { id: monitor.id, location: defaultLocation, status }
