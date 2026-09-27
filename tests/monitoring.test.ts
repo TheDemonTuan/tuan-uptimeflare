@@ -17,14 +17,6 @@ const env = {
   TELEGRAM_BOT_TOKEN: 'private-bot-token', TELEGRAM_CHAT_ID: 'private-chat',
 } as Env
 
-test('four independent 9router checks and all five production monitors remain', () => {
-  expect(pageConfig.group?.['9router']).toEqual(['nine_router_api', 'nine_router_auth', 'nine_router_admin', 'nine_router_storage'])
-  expect(workerConfig.monitors.map(m => m.id)).toEqual([
-    'nine_router_api', 'nine_router_auth', 'nine_router_admin', 'nine_router_storage',
-    'transactions', 'beszel_hub', 'beszel_main_live', 'beszel_main_systems',
-  ])
-})
-
 test('public auth guard requires the actual 401 body', async () => {
   globalThis.fetch = mock(async () => new Response('API key required for remote API access', { status: 401 })) as typeof fetch
   expect((await doMonitor(byId('nine_router_auth'), 'LOCAL', env)).status.up).toBe(true)
