@@ -43,6 +43,16 @@ variable "CF_ACCESS_CLIENT_SECRET" {
   }
 }
 
+variable "BESZEL_ACCESS_CLIENT_ID" {
+  type      = string
+  sensitive = true
+}
+
+variable "BESZEL_ACCESS_CLIENT_SECRET" {
+  type      = string
+  sensitive = true
+}
+
 variable "TELEGRAM_BOT_TOKEN" {
   type      = string
   sensitive = true
@@ -105,6 +115,14 @@ resource "cloudflare_workers_script" "uptimeflare_worker" {
     name = "CF_ACCESS_CLIENT_SECRET"
     type = "secret_text"
     text = var.CF_ACCESS_CLIENT_SECRET
+    }, {
+    name = "BESZEL_ACCESS_CLIENT_ID"
+    type = "secret_text"
+    text = var.BESZEL_ACCESS_CLIENT_ID
+    }, {
+    name = "BESZEL_ACCESS_CLIENT_SECRET"
+    type = "secret_text"
+    text = var.BESZEL_ACCESS_CLIENT_SECRET
     }, {
     name = "TELEGRAM_BOT_TOKEN"
     type = "secret_text"
