@@ -1,5 +1,7 @@
-import { Container, Group, Image, useMantineColorScheme } from '@mantine/core'
+import { useMantineColorScheme } from '@mantine/core'
+import { IconActivity, IconMoon, IconSun } from '@tabler/icons-react'
 import Link from 'next/link'
+import { useRouter } from 'next/router'
 import type { CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import classes from '@/styles/Header.module.css'
@@ -16,49 +18,55 @@ const languageOptions: { value: Locale; label: string }[] = [
   { value: 'zh-TW', label: '繁體中文' },
 ]
 
-const controlStyle: CSSProperties = {
-  minHeight: 44,
-  border: '1px solid var(--mantine-color-default-border)',
-  borderRadius: 10,
-  color: 'var(--mantine-color-text)',
-  background: 'var(--mantine-color-body)',
-  padding: '0 8px',
-}
-
 export default function Header({ style }: { style?: CSSProperties }) {
   const { t, i18n } = useTranslation('common')
   const { colorScheme, setColorScheme } = useMantineColorScheme()
+  const router = useRouter()
+
   const links: PageConfigLink[] = [
     { label: t('Overview'), link: '/' },
     { label: t('Incidents & maintenance'), link: '/incidents' },
     ...(pageConfig.links || []),
   ]
 
+  const title = pageConfig.title || 'Status'
+
   return (
-    <header className={classes.header} style={{ height: 'auto', minHeight: 64, marginBottom: 24, ...style }}>
-      <Container size={1280} className={classes.inner} style={{ height: 'auto', minHeight: 64, flexWrap: 'wrap', gap: 16, padding: '8px 16px' }}>
-        <Link href="/" aria-label={pageConfig.title || 'UptimeFlare'} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, maxWidth: '100%', color: 'inherit', textDecoration: 'none' }}>
-          <Image
-            src={pageConfig.logo ?? '/logo.svg'}
-            h={48}
-            w={140}
-            fit="contain"
-            alt={pageConfig.title || 'UptimeFlare'}
-          />
-          <span style={{ fontWeight: 700 }}>{pageConfig.title}</span>
+    <header className={classes.header} style={style}>
+      <div className={classes.inner}>
+        <Link href="/" className={classes.brand} aria-label={title}>
+          <div className={classes.brandBadge}>
+            <IconActivity size={18} stroke={2.2} />
+          </div>
+          <span>{title}</span>
         </Link>
-        <Group gap={8} wrap="wrap" style={{ flex: '1 1 auto', justifyContent: 'flex-end' }}>
-          {links.map((link) =>
-            link.link.startsWith('/') ? (
-              <Link key={link.link} href={link.link} className={classes.link} data-active={link.highlight}>
+
+        <nav className={classes.navGroup} aria-label="Main Navigation">
+          {links.map((link) => {
+            const isInternal = link.link.startsWith('/')
+            const isActive = isInternal && (router.asPath === link.link || (link.link === '/' && router.pathname === '/'))
+            return isInternal ? (
+              <Link
+                key={link.link}
+                href={link.link}
+                className={classes.navLink}
+                data-active={isActive ? 'true' : undefined}
+              >
                 {link.label}
               </Link>
             ) : (
-              <a key={link.link} href={link.link} target="_blank" rel="noopener noreferrer" className={classes.link} data-active={link.highlight}>
+              <a
+                key={link.link}
+                href={link.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={classes.navLink}
+              >
                 {link.label}
               </a>
             )
-          )}
+          })}
+
           <select
             aria-label={t('Language')}
             value={i18n.language}
@@ -68,22 +76,27 @@ export default function Header({ style }: { style?: CSSProperties }) {
               document.documentElement.lang = locale
               void i18n.changeLanguage(locale)
             }}
-            style={controlStyle}
+            className={classes.controlSelect}
           >
-            {languageOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+            {languageOptions.map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
           </select>
+
           <select
             aria-label={t('Theme')}
             value={colorScheme}
             onChange={(event) => setColorScheme(event.currentTarget.value as 'auto' | 'light' | 'dark')}
-            style={controlStyle}
+            className={classes.controlSelect}
           >
-            <option value="auto">{t('System')}</option>
-            <option value="light">{t('Light')}</option>
-            <option value="dark">{t('Dark')}</option>
+            <option value="auto">🖥️ {t('System')}</option>
+            <option value="light">☀️ {t('Light')}</option>
+            <option value="dark">🌙 {t('Dark')}</option>
           </select>
-        </Group>
-      </Container>
+        </nav>
+      </div>
     </header>
   )
 }

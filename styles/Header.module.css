@@ -1,36 +1,111 @@
 .header {
-  min-height: 64px;
-  height: auto;
-  background-color: light-dark(#ffffff, #111827);
-  border-bottom: 1px solid light-dark(#e2e8f0, #1f2937);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: 100%;
+  background: light-dark(rgba(255, 255, 255, 0.85), rgba(9, 9, 11, 0.85));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid light-dark(#e2e8f0, rgba(255, 255, 255, 0.08));
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .inner {
+  max-width: 1140px;
+  margin: 0 auto;
   min-height: 64px;
-  height: auto;
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
   gap: 16px;
-  padding: 8px 16px;
+  padding: 10px 16px;
 }
-.link {
-  display: block;
-  line-height: 1;
-  padding: rem(8px) rem(12px);
-  border-radius: var(--mantine-radius-sm);
+
+@media (min-width: 768px) {
+  .inner {
+    padding: 12px 24px;
+  }
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   text-decoration: none;
-  color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-0));
-  font-size: var(--mantine-font-size-sm);
+  color: light-dark(#0f172a, #f8fafc);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+  transition: opacity 0.15s ease;
+}
+
+.brand:hover {
+  opacity: 0.9;
+}
+
+.brandBadge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: light-dark(#f1f5f9, rgba(255, 255, 255, 0.08));
+  border: 1px solid light-dark(#e2e8f0, rgba(255, 255, 255, 0.1));
+  color: #3b82f6;
+}
+
+.navGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.navLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
   font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: light-dark(#64748b, #94a3b8);
+  transition: all 0.15s ease;
+}
 
-  @mixin hover {
-    background-color: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
-  }
+.navLink:hover {
+  color: light-dark(#0f172a, #f8fafc);
+  background: light-dark(#f1f5f9, rgba(255, 255, 255, 0.05));
+}
 
-  [data-mantine-color-scheme] &[data-active] {
-    background-color: var(--mantine-color-blue-filled);
-    color: var(--mantine-color-white);
-  }
+.navLink[data-active="true"] {
+  color: light-dark(#0f172a, #ffffff);
+  background: light-dark(#e2e8f0, rgba(255, 255, 255, 0.1));
+  font-weight: 600;
+}
+
+.controlSelect {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: light-dark(#334155, #cbd5e1);
+  background: light-dark(#f8fafc, rgba(255, 255, 255, 0.04));
+  border: 1px solid light-dark(#cbd5e1, rgba(255, 255, 255, 0.08));
+  cursor: pointer;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.controlSelect:hover {
+  background: light-dark(#f1f5f9, rgba(255, 255, 255, 0.08));
+  border-color: light-dark(#94a3b8, rgba(255, 255, 255, 0.15));
+}
+
+.controlSelect:focus-visible {
+  border-color: #3b82f6;
 }

@@ -18,6 +18,7 @@
 /build
 
 # misc
+*.png
 .DS_Store
 *.pem
 
