@@ -25,6 +25,42 @@ variable "UPTIMEFLARE_D1_ID" {
   type = string
 }
 
+variable "CF_ACCESS_CLIENT_ID" {
+  type      = string
+  sensitive = true
+  validation {
+    condition     = length(trimspace(var.CF_ACCESS_CLIENT_ID)) > 0
+    error_message = "CF_ACCESS_CLIENT_ID is required."
+  }
+}
+
+variable "CF_ACCESS_CLIENT_SECRET" {
+  type      = string
+  sensitive = true
+  validation {
+    condition     = length(trimspace(var.CF_ACCESS_CLIENT_SECRET)) > 0
+    error_message = "CF_ACCESS_CLIENT_SECRET is required."
+  }
+}
+
+variable "TELEGRAM_BOT_TOKEN" {
+  type      = string
+  sensitive = true
+  validation {
+    condition     = length(trimspace(var.TELEGRAM_BOT_TOKEN)) > 0
+    error_message = "TELEGRAM_BOT_TOKEN is required."
+  }
+}
+
+variable "TELEGRAM_CHAT_ID" {
+  type      = string
+  sensitive = true
+  validation {
+    condition     = length(trimspace(var.TELEGRAM_CHAT_ID)) > 0
+    error_message = "TELEGRAM_CHAT_ID is required."
+  }
+}
+
 data "cloudflare_zone" "main" {
   filter = {
     name = "tuannguyenviet.site"
@@ -61,6 +97,22 @@ resource "cloudflare_workers_script" "uptimeflare_worker" {
     name = "UPTIMEFLARE_D1"
     type = "d1"
     id   = var.UPTIMEFLARE_D1_ID
+    }, {
+    name = "CF_ACCESS_CLIENT_ID"
+    type = "secret_text"
+    text = var.CF_ACCESS_CLIENT_ID
+    }, {
+    name = "CF_ACCESS_CLIENT_SECRET"
+    type = "secret_text"
+    text = var.CF_ACCESS_CLIENT_SECRET
+    }, {
+    name = "TELEGRAM_BOT_TOKEN"
+    type = "secret_text"
+    text = var.TELEGRAM_BOT_TOKEN
+    }, {
+    name = "TELEGRAM_CHAT_ID"
+    type = "secret_text"
+    text = var.TELEGRAM_CHAT_ID
   }]
 }
 
