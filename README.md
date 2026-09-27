@@ -21,6 +21,8 @@ Beszel Access app `beszel.tuannguyenviet.site` grants Service Auth only to servi
 
 Terraform `sensitive` hides printed values but **does not encrypt Terraform state**. Actions use ephemeral state without uploading it. For manual apply, use an access-controlled encrypted remote backend; never commit `*.tfstate`, `*.tfvars`, Access tokens, or Telegram credentials. Keep the existing Cloudflare API token/account ID Actions secrets and D1 ID (`UPTIMEFLARE_D1_ID` repository variable, or workflow discovery). `bun test tests/monitoring.test.ts` tests checks and alerts locally without production tokens.
 
+Dependency overrides in `package.json` patch the legacy `@cloudflare/next-on-pages` toolchain (including Next's bundled PostCSS); `npm audit` and the Linux Pages build run on dependency PRs. ponytail: This remains on Pages/Next 15; migrate the deployment to OpenNext/Workers before upgrading Next or removing the overrides.
+
 
 📢 **[[SECURITY ADVISORY](https://github.com/lyc8503/UptimeFlare/security/advisories/GHSA-36q9-v7p3-vj6v) 2026/03/04]** A vulnerability (CVE-2026-29779) that could expose monitor configuration and credentials in `uptime.config.ts` to clients was fixed. Versions between 2025-09-21 (from commit `41257c6`) and 2026-03-04 are affected. **Affected users are strongly advised to upgrade to the latest version.**
 
