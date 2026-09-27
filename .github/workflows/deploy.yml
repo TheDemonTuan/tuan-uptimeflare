@@ -59,6 +59,14 @@ jobs:
         env:
           NPM_CONFIG_LEGACY_PEER_DEPS: 'true'
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Test monitoring contracts
+        run: bun test tests/monitoring.test.ts
+
       - name: Resolve D1 database
         env:
           UPTIMEFLARE_D1_ID: ${{ vars.UPTIMEFLARE_D1_ID }}
@@ -82,8 +90,13 @@ jobs:
           D1_ID: ${{ env.D1_ID }}
 
       - name: Deploy using Terraform
+        # Required credentials must exist before importing or applying resources.
         # As we don't save terraform state somewhere, we need to import the existing resources
+        shell: bash
         run: |
+          for name in CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID; do
+            if [ -z "${!name}" ]; then echo "Missing required secret: $name" >&2; exit 1; fi
+          done
           terraform init
 
           DO_RESP=$(curl "https://api.cloudflare.com/client/v4/accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/workers/durable_objects/namespaces?per_page=1000" \
@@ -147,7 +160,15 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           TF_VAR_CLOUDFLARE_ACCOUNT_ID: ${{ steps.fetch_account_id.outputs.account_id }}
-          TF_VAR_UPTIMEFLARE_D1_ID: ${{ vars.UPTIMEFLARE_D1_ID }}
+          TF_VAR_UPTIMEFLARE_D1_ID: ${{ env.D1_ID }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TF_VAR_CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TF_VAR_CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          TF_VAR_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TF_VAR_TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
       # Currently Terraform Cloudflare provider doesn't support direct upload, use wrangler to upload instead.
       - name: Upload pages
