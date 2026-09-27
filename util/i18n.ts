@@ -1,17 +1,33 @@
-import i18n from 'i18next'
+import { createInstance } from 'i18next'
 import { initReactI18next } from 'react-i18next'
-import LanguageDetector from 'i18next-browser-languagedetector'
+import vi from '../locales/vi/common.json'
 import en from '../locales/en/common.json'
 import zhCN from '../locales/zh-CN/common.json'
 import zhTW from '../locales/zh-TW/common.json'
 import frFR from '../locales/fr-FR/common.json'
 import deDE from '../locales/de-DE/common.json'
 
-i18n
-  .use(LanguageDetector)
-  .use(initReactI18next)
-  .init({
+export type Locale = 'vi' | 'en' | 'de-DE' | 'fr-FR' | 'zh-CN' | 'zh-TW'
+
+const locales: readonly Locale[] = ['vi', 'en', 'de-DE', 'fr-FR', 'zh-CN', 'zh-TW']
+
+export function resolveLocale(cookieHeader?: string): Locale {
+  const cookie = cookieHeader?.split(';').map((part) => part.trim()).find((part) => part.startsWith('UPTIMEFLARE_LOCALE='))
+  if (!cookie) return 'vi'
+  try {
+    const value = decodeURIComponent(cookie.slice('UPTIMEFLARE_LOCALE='.length))
+    return locales.includes(value as Locale) ? (value as Locale) : 'vi'
+  } catch {
+    return 'vi'
+  }
+}
+
+export function createI18n(locale: Locale) {
+  const instance = createInstance()
+  void instance.use(initReactI18next).init({
+    lng: locale,
     resources: {
+      vi: { common: vi },
       en: { common: en },
       'zh-CN': { common: zhCN },
       zh: { common: zhCN },
@@ -21,13 +37,11 @@ i18n
       de: { common: deDE },
       'de-DE': { common: deDE },
     },
+    ns: ['common'],
+    defaultNS: 'common',
     fallbackLng: 'en',
-    interpolation: {
-      escapeValue: false,
-    },
-    detection: {
-      order: ['navigator'],
-    },
+    initAsync: false,
+    interpolation: { escapeValue: false },
   })
-
-export default i18n
+  return instance
+}

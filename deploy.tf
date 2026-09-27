@@ -21,11 +21,32 @@ variable "enable_do_migration" {
   default = false
 }
 
+variable "TELEGRAM_BOT_TOKEN" {
+  type      = string
+  sensitive = true
+  validation {
+    condition     = length(trimspace(var.TELEGRAM_BOT_TOKEN)) > 0
+    error_message = "TELEGRAM_BOT_TOKEN must not be empty."
+  }
+}
+
+variable "TELEGRAM_CHAT_ID" {
+  type      = string
+  sensitive = true
+  validation {
+    condition     = length(trimspace(var.TELEGRAM_CHAT_ID)) > 0
+    error_message = "TELEGRAM_CHAT_ID must not be empty."
+  }
+}
+
 resource "cloudflare_d1_database" "uptimeflare_d1" {
   account_id            = var.CLOUDFLARE_ACCOUNT_ID
   name                  = "uptimeflare_d1"
   read_replication = {
     mode = "auto"
+  }
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -59,7 +80,16 @@ resource "cloudflare_workers_script" "uptimeflare_worker" {
     name = "UPTIMEFLARE_D1"
     type = "d1"
     id   = cloudflare_d1_database.uptimeflare_d1.id
+    }, {
+    name = "TELEGRAM_BOT_TOKEN"
+    type = "secret_text"
+    text = var.TELEGRAM_BOT_TOKEN
+    }, {
+    name = "TELEGRAM_CHAT_ID"
+    type = "secret_text"
+    text = var.TELEGRAM_CHAT_ID
   }]
+
 }
 
 resource "cloudflare_workers_cron_trigger" "uptimeflare_worker_cron" {
@@ -70,30 +100,3 @@ resource "cloudflare_workers_cron_trigger" "uptimeflare_worker_cron" {
   }]
 }
 
-resource "cloudflare_pages_project" "uptimeflare" {
-  account_id        = var.CLOUDFLARE_ACCOUNT_ID
-  name              = "uptimeflare"
-  production_branch = "main"
-
-  deployment_configs = {
-    # SMH Cloudflare provider will throw an error without preview config
-    preview = {
-      fail_open = false
-    }
-    production = {
-      d1_databases = {
-        UPTIMEFLARE_D1 = {
-          id = cloudflare_d1_database.uptimeflare_d1.id
-        }
-      }
-      compatibility_date  = "2025-04-02"
-      compatibility_flags = ["nodejs_compat"]
-      fail_open           = false
-    }
-  }
-
-  # SMH it will error without this build_config
-  build_config = {
-    root_dir = "/"
-  }
-}

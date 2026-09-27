@@ -25,15 +25,15 @@ New users can deploy directly, while existing users can have a simple auto migra
   - Custom status code & keyword checks for HTTP(s)
   - Downtime notification supporting [100+ notification channels](https://github.com/caronc/apprise/wiki)
   - Customizable Webhook
-  - Multi-language support (English/Chinese)
+- Multi-language support (Tiếng Việt, English, Deutsch, Français, 简体中文, 繁體中文)
 - Status page
-  - Interactive ping (response time) chart for all types of monitors
-  - Scheduled maintenances alerts & Incident history page
-  - Responsive UI that adapts to your system theme
-  - Customizable status page
-  - Use your own domain with CNAME
-  - Optional password authentication (private status page)
-  - JSON API for fetching realtime status data
+  - Server-side rendering on Cloudflare Workers via OpenNext
+  - Interactive 12-hour response time chart and accessible table
+  - 90-day daily uptime history with DST-aware boundaries
+  - Scheduled maintenance alerts and monthly incident history
+  - System, light, and dark appearance
+  - Optional HTTP Basic authentication via `STATUS_PAGE_AUTH`
+  - Realtime summary and snapshot JSON APIs
 
 ## 👀Demo
 
@@ -47,9 +47,24 @@ Some screenshots:
 
 Please refer to [Wiki](https://github.com/lyc8503/UptimeFlare/wiki)
 
-## 🚀Upgrade existing deployments
+## 🚀 Deployment architecture
 
-Get the latest features right away with [simple upgrade process](https://github.com/lyc8503/UptimeFlare/wiki/Synchronize-updates-from-upstream)
+UptimeFlare deploys as two decoupled Cloudflare Workers sharing a single D1 database:
+- **Monitoring Worker (`uptimeflare_worker`)**: runs every minute via cron, executes probes, records 12-hour latency and 90-day incidents in D1 `uptimeflare_d1`, and triggers first-failure Telegram notifications.
+- **Status Page Worker (`uptimeflare-web`)**: Next.js 16 (Pages Router) running on Cloudflare Workers with `@opennextjs/cloudflare`.
+
+### Web Authentication
+
+To protect the status page and its APIs, set the secret variable `STATUS_PAGE_AUTH` on the web Worker:
+```sh
+npx wrangler secret put STATUS_PAGE_AUTH
+```
+Enter credentials in `username:password` format. Omit the secret for a public status page.
+### Telegram downtime alerts for this deployment
+
+The three existing monitors (9router API, ACB Transactions, Beszel Hub) send a Telegram message on their first failed check. The 9router check calls the public `/api/health` endpoint; `"ok":true` checks app liveness, not database readiness. Recovery and later error changes do not send Telegram messages.
+
+For GitHub Actions deployment, set repository Actions secrets `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` before pushing to `main`. For manual Terraform apply, set `TF_VAR_TELEGRAM_BOT_TOKEN` and `TF_VAR_TELEGRAM_CHAT_ID` as protected environment variables (plus the existing Cloudflare credentials). The Worker receives them as `secret_text` bindings; do not put real values in `uptime.config.ts`, committed files, or command arguments. Terraform can retain sensitive values in its state: protect the state backend and access to it. Deploying without these variables will fail rather than silently disable alerts. A Telegram bot must exist and be allowed to message the chosen chat.
 
 ## ⚙️Docs for developer
 

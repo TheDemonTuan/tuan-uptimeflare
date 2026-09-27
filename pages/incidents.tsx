@@ -1,144 +1,81 @@
 import Head from 'next/head'
-
-import { Inter } from 'next/font/google'
-import { MaintenanceConfig, MonitorTarget } from '@/types/config'
-import { maintenances, pageConfig } from '@/uptime.config'
-import Header from '@/components/Header'
-import { Box, Button, Center, Container, Group, Select } from '@mantine/core'
-import Footer from '@/components/Footer'
+import type { GetServerSidePropsContext } from 'next'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
+import { Box, Button, Container, Group, Select, Title } from '@mantine/core'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { PublicMonitor } from '@/types/config'
+import { maintenances, pageConfig } from '@/page.config'
+import { workerConfig } from '@/uptime.config'
+import { requireBasicAuth } from '@/server/auth'
+import { resolveLocale } from '@/util/i18n'
+import Header from '@/components/Header'
+import dashboardStyles from '@/styles/Dashboard.module.css'
+import Footer from '@/components/Footer'
 import MaintenanceAlert from '@/components/MaintenanceAlert'
 import NoIncidentsAlert from '@/components/NoIncidents'
-import { useTranslation } from 'react-i18next'
 
-export const runtime = 'experimental-edge'
-const inter = Inter({ subsets: ['latin'] })
+type IncidentsProps = { accessDenied: true } | { accessDenied?: false; monitors: PublicMonitor[]; renderedAt: number; locale?: string }
+const monthPattern = /^\d{4}-(0[1-9]|1[0-2])$/
 
-function getSelectedMonth() {
-  const hash = window.location.hash.replace('#', '')
-  if (!hash) {
-    const now = new Date()
-    return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0')
-  }
-  return hash.split('-').splice(0, 2).join('-')
+export default function IncidentsPage(props: IncidentsProps) {
+  if (props.accessDenied) return null
+  return <Incidents monitors={props.monitors} renderedAt={props.renderedAt} />
 }
 
-function filterIncidentsByMonth(
-  incidents: MaintenanceConfig[],
-  monthStr: string,
-  monitors: MonitorTarget[]
-): (Omit<MaintenanceConfig, 'monitors'> & { monitors: MonitorTarget[] })[] {
-  return incidents
-    .filter((incident) => {
-      const d = new Date(incident.start)
-      const incidentMonth = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
-      return incidentMonth === monthStr
-    })
-    .map((e) => ({
-      ...e,
-      monitors: (e.monitors || []).map((e) => monitors.find((mon) => mon.id === e)!),
-    }))
-    .sort((a, b) => (new Date(a.start) > new Date(b.start) ? -1 : 1))
-}
-
-function getPrevNextMonth(monthStr: string) {
-  const [year, month] = monthStr.split('-').map(Number)
-  const date = new Date(year, month - 1)
-  const prev = new Date(date)
-  prev.setMonth(prev.getMonth() - 1)
-  const next = new Date(date)
-  next.setMonth(next.getMonth() + 1)
-  return {
-    prev: prev.getFullYear() + '-' + String(prev.getMonth() + 1).padStart(2, '0'),
-    next: next.getFullYear() + '-' + String(next.getMonth() + 1).padStart(2, '0'),
-  }
-}
-
-export default function IncidentsPage({ monitors }: { monitors: MonitorTarget[] }) {
+function Incidents({ monitors, renderedAt }: { monitors: PublicMonitor[]; renderedAt: number }) {
   const { t } = useTranslation('common')
+  const initial = new Date(renderedAt * 1000)
+  const [selectedMonth, setSelectedMonth] = useState(`${initial.getUTCFullYear()}-${String(initial.getUTCMonth() + 1).padStart(2, '0')}`)
+  const [localTime, setLocalTime] = useState(false)
   const [selectedMonitor, setSelectedMonitor] = useState<string | null>('')
-  const [selectedMonth, setSelectedMonth] = useState(getSelectedMonth())
-
   useEffect(() => {
-    const onHashChange = () => setSelectedMonth(getSelectedMonth())
-    window.addEventListener('hashchange', onHashChange)
-    return () => window.removeEventListener('hashchange', onHashChange)
+    const onHash = () => {
+      const hash = window.location.hash.slice(1)
+      const today = new Date()
+      setSelectedMonth(monthPattern.test(hash) ? hash : `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`)
+      setLocalTime(true)
+    }
+    onHash()
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
-  const filteredIncidents = filterIncidentsByMonth(maintenances, selectedMonth, monitors)
-  const monitorFilteredIncidents = selectedMonitor
-    ? filteredIncidents.filter((i) => i.monitors.find((e) => e.id === selectedMonitor))
-    : filteredIncidents
+  const filtered = maintenances.filter((incident) => {
+    const date = new Date(incident.start)
+    const year = localTime ? date.getFullYear() : date.getUTCFullYear()
+    const month = localTime ? date.getMonth() : date.getUTCMonth()
+    return `${year}-${String(month + 1).padStart(2, '0')}` === selectedMonth &&
+      (!selectedMonitor || incident.monitors?.includes(selectedMonitor))
+  }).sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime())
+  const [year, month] = selectedMonth.split('-').map(Number)
+  const prev = new Date(Date.UTC(year, month - 2, 1))
+  const next = new Date(Date.UTC(year, month, 1))
+  const monthValue = (date: Date) => `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`
 
-  const { prev, next } = getPrevNextMonth(selectedMonth)
-
-  const monitorOptions = [
-    { value: '', label: t('All') },
-    ...monitors.map((monitor) => ({
-      value: monitor.id,
-      label: monitor.name,
-    })),
-  ]
-
-  return (
-    <>
-      <Head>
-        <title>{pageConfig.title}</title>
-        <link rel="icon" href={pageConfig.favicon ?? '/favicon.png'} />
-      </Head>
-
-      <main className={inter.className}>
-        <Header
-          style={{
-            marginBottom: '40px',
-          }}
-        />
-        <Center>
-          <Container size="md" style={{ width: '100%' }}>
-            <Group justify="end" mb="md">
-              <Select
-                placeholder={t('Select monitor')}
-                data={monitorOptions}
-                value={selectedMonitor}
-                onChange={setSelectedMonitor}
-                clearable
-                style={{ maxWidth: 300, float: 'right' }}
-              />
-            </Group>
-            <Box>
-              {monitorFilteredIncidents.length === 0 ? (
-                <NoIncidentsAlert />
-              ) : (
-                monitorFilteredIncidents.map((incident, i) => (
-                  <MaintenanceAlert key={i} maintenance={incident} />
-                ))
-              )}
-            </Box>
-            <Group justify="space-between" mt="md">
-              <Button variant="default" onClick={() => (window.location.hash = prev)}>
-                {t('Backwards')}
-              </Button>
-              <Box style={{ alignSelf: 'center', fontWeight: 500, fontSize: 18 }}>
-                {selectedMonth}
-              </Box>
-              <Button variant="default" onClick={() => (window.location.hash = next)}>
-                {t('Forward')}
-              </Button>
-            </Group>
-          </Container>
-        </Center>
-        <Footer />
-      </main>
-    </>
-  )
+  return <>
+    <Head><title>{pageConfig.title}</title><link rel="icon" href={pageConfig.favicon ?? '/favicon.png'} /></Head>
+    <main><Header /><div className={dashboardStyles.container} style={{ padding: '24px 16px' }}>
+      <Title order={1}>{t('Incidents & maintenance')}</Title>
+      <Group justify="space-between" my="md" wrap="wrap">
+        <Group>
+          <Button variant="default" onClick={() => { window.location.hash = monthValue(prev) }}>{t('Backwards')}</Button>
+          <Box aria-live="polite">{selectedMonth}</Box>
+          <Button variant="default" onClick={() => { window.location.hash = monthValue(next) }}>{t('Forward')}</Button>
+        </Group>
+        <Select aria-label={t('Select monitor')} placeholder={t('Select monitor')}
+          data={[{ value: '', label: t('All') }, ...monitors.map(({ id, name }) => ({ value: id, label: name }))]}
+          value={selectedMonitor} onChange={setSelectedMonitor} clearable />
+      </Group>
+      {filtered.length ? filtered.map((incident, index) => <MaintenanceAlert key={`${incident.start}-${index}`} maintenance={incident} configured={monitors} />) : <NoIncidentsAlert />}
+    </div><Footer /></main>
+  </>
 }
 
-export async function getServerSideProps() {
-  const { workerConfig } = await import('@/uptime.config')
-  // Only present these values to client
-  const monitors: MonitorTarget[] = workerConfig.monitors.map((monitor) => ({
-    id: monitor.id,
-    name: monitor.name,
-  })) as MonitorTarget[]
-  return { props: { monitors } }
+
+export async function getServerSideProps({ req, res }: GetServerSidePropsContext) {
+  const { env } = await getCloudflareContext({ async: true })
+  if (!requireBasicAuth(req, res, env.STATUS_PAGE_AUTH)) return { props: { accessDenied: true } }
+  const monitors: PublicMonitor[] = workerConfig.monitors.map(({ id, name }) => ({ id, name }))
+  return { props: { monitors, renderedAt: Math.floor(Date.now() / 1000), locale: resolveLocale(req.headers.cookie) } }
 }

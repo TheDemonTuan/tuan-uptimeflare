@@ -1,159 +1,79 @@
-import { MonitorState, MonitorTarget } from '@/types/config'
+import type { MonitorState, PublicMonitor } from '@/types/config'
+import type { Locale } from '@/util/i18n'
 import { getColor } from '@/util/color'
+import { formatDateTime, formatDuration, getDailyUptime, useTimeZone } from '@/util/time'
 import { Box, Tooltip, Modal } from '@mantine/core'
-import { useResizeObserver } from '@mantine/hooks'
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-const moment = require('moment')
-require('moment-precise-range-plugin')
 
-export default function DetailBar({
-  monitor,
-  state,
-}: {
-  monitor: MonitorTarget
+export default function DetailBar({ monitor, state, now }: {
+  monitor: PublicMonitor
   state: MonitorState
+  now: number
 }) {
-  const { t } = useTranslation('common')
-  const [barRef, barRect] = useResizeObserver()
-  const [modalOpened, setModalOpened] = useState(false)
-  const [modalTitle, setModalTitle] = useState('')
-  const [modelContent, setModelContent] = useState(<div />)
+  const { t, i18n } = useTranslation('common')
+  const locale = i18n.language as Locale
+  const timeZone = useTimeZone()
+  const dayFormatter = useMemo(() => new Intl.DateTimeFormat(locale, {
+    year: 'numeric', month: 'numeric', day: 'numeric', timeZone,
+  }), [locale, timeZone])
+  const barRef = useRef<HTMLDivElement>(null)
+  const [selectedDay, setSelectedDay] = useState<number | null>(null)
+  const incidents = state.incident[monitor.id] || []
+  const days = getDailyUptime(incidents, now, timeZone !== 'UTC')
 
-  const overlapLen = (x1: number, x2: number, y1: number, y2: number) => {
-    return Math.max(0, Math.min(x2, y2) - Math.max(x1, y1))
-  }
+  useEffect(() => {
+    if (barRef.current) barRef.current.scrollLeft = barRef.current.scrollWidth
+  }, [timeZone])
 
-  const uptimePercentBars = []
-
-  const currentTime = Math.round(Date.now() / 1000)
-  const montiorStartTime = state.incident[monitor.id][0].start[0]
-
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
-
-  for (let i = 89; i >= 0; i--) {
-    const dayStart = Math.round(todayStart.getTime() / 1000) - i * 86400
-    const dayEnd = dayStart + 86400
-
-    const dayMonitorTime = overlapLen(dayStart, dayEnd, montiorStartTime, currentTime)
-    let dayDownTime = 0
-
-    let incidentReasons: string[] = []
-
-    for (let incident of state.incident[monitor.id]) {
-      const incidentStart = incident.start[0]
-      const incidentEnd = incident.end ?? currentTime
-
-      const overlap = overlapLen(dayStart, dayEnd, incidentStart, incidentEnd)
-      dayDownTime += overlap
-
-      // Incident history for the day
-      if (overlap > 0) {
-        for (let i = 0; i < incident.error.length; i++) {
-          let partStart = incident.start[i]
-          let partEnd =
-            i === incident.error.length - 1 ? incident.end ?? currentTime : incident.start[i + 1]
-          partStart = Math.max(partStart, dayStart)
-          partEnd = Math.min(partEnd, dayEnd)
-
-          if (overlapLen(dayStart, dayEnd, partStart, partEnd) > 0) {
-            const startStr = new Date(partStart * 1000).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })
-            const endStr = new Date(partEnd * 1000).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })
-            incidentReasons.push(`[${startStr}-${endStr}] ${incident.error[i]}`)
-          }
-        }
+  const selected = selectedDay === null ? null : days[selectedDay]
+  const reasons: string[] = []
+  if (selected) for (const incident of incidents) {
+    for (let index = 0; index < incident.error.length; index++) {
+      const start = Math.max(selected.start, incident.start[index])
+      const end = Math.min(selected.end, incident.start[index + 1] ?? incident.end ?? now, now)
+      if (end > start) {
+        const from = formatDateTime(start, locale, timeZone, { hour: '2-digit', minute: '2-digit' })
+        const to = formatDateTime(end, locale, timeZone, { hour: '2-digit', minute: '2-digit' })
+        reasons.push(`[${from}-${to}] ${incident.error[index]}`)
       }
     }
-
-    const dayPercent = (((dayMonitorTime - dayDownTime) / dayMonitorTime) * 100).toPrecision(4)
-
-    uptimePercentBars.push(
-      <Tooltip
-        multiline
-        key={i}
-        events={{ hover: true, focus: false, touch: true }}
-        label={
-          Number.isNaN(Number(dayPercent)) ? (
-            t('No Data')
-          ) : (
-            <>
-              <div>
-                {t('percent at date', {
-                  percent: dayPercent,
-                  date: new Date(dayStart * 1000).toLocaleDateString(),
-                })}
-              </div>
-              {dayDownTime > 0 && (
-                <div>
-                  {t('Down for', {
-                    duration: moment.preciseDiff(moment(0), moment(dayDownTime * 1000)),
-                  })}
-                </div>
-              )}
-            </>
-          )
-        }
-      >
-        <div
-          style={{
-            height: '20px',
-            width: '7px',
-            background: getColor(dayPercent, false),
-            borderRadius: '2px',
-            marginLeft: '1px',
-            marginRight: '1px',
-          }}
-          onClick={() => {
-            if (dayDownTime > 0) {
-              setModalTitle(
-                t('incidents at', {
-                  name: monitor.name,
-                  date: new Date(dayStart * 1000).toLocaleDateString(),
-                })
-              )
-              setModelContent(
-                <>
-                  {incidentReasons.map((reason, index) => (
-                    <div key={index}>{reason}</div>
-                  ))}
-                </>
-              )
-              setModalOpened(true)
-            }
-          }}
-        />
-      </Tooltip>
-    )
   }
 
   return (
     <>
       <Modal
-        opened={modalOpened}
-        onClose={() => setModalOpened(false)}
-        title={modalTitle}
-        size={'40em'}
+        opened={selected !== null}
+        onClose={() => setSelectedDay(null)}
+        title={selected ? t('incidents at', {
+          name: monitor.name,
+          date: formatDateTime(selected.start, locale, timeZone, { year: 'numeric', month: 'numeric', day: 'numeric' }),
+        }) : ''}
+        size="40em"
       >
-        {modelContent}
+        {reasons.map((reason, index) => <div key={index}>{reason}</div>)}
       </Modal>
-      <Box
-        style={{
-          display: 'flex',
-          flexWrap: 'nowrap',
-          marginTop: '10px',
-          marginBottom: '5px',
-        }}
-        visibleFrom="540"
-        ref={barRef}
-      >
-        {uptimePercentBars.slice(Math.floor(Math.max(9 * 90 - barRect.width, 0) / 9), 90)}
+      <Box ref={barRef} style={{ overflowX: 'auto', maxWidth: '100%', margin: '10px 0 5px' }}>
+        <div style={{ display: 'flex', width: 'max-content', gap: 2 }}>
+          {days.map((day, index) => {
+            const date = dayFormatter.format(day.start * 1000)
+            const percent = day.monitoredSeconds > 0
+              ? (((day.monitoredSeconds - day.downSeconds) / day.monitoredSeconds) * 100).toPrecision(4)
+              : null
+            const label = percent === null ? `${date}: ${t('Unknown')}` :
+              `${t('percent at date', { percent, date })}${day.downSeconds > 0 ? `; ${t('Down for', { duration: formatDuration(day.downSeconds, locale) })}` : ''}`
+            const style = { height: 20, width: 8, flex: '0 0 8px', borderRadius: 2, background: percent === null ? '#9ca3af' : getColor(percent, false) }
+            return (
+              <Tooltip key={day.start} label={label} multiline events={{ hover: true, focus: true, touch: true }}>
+                {day.downSeconds > 0 ? (
+                  <button type="button" aria-label={label} onClick={() => setSelectedDay(index)} style={{ ...style, border: 0, padding: 0, cursor: 'pointer' }} />
+                ) : (
+                  <span role="img" aria-label={label} style={{ ...style, display: 'block' }} />
+                )}
+              </Tooltip>
+            )
+          })}
+        </div>
       </Box>
     </>
   )

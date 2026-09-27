@@ -43,15 +43,7 @@ async function httpResponseBasicCheck(
     // Only read response body if we have a keyword to check
     const responseBody = await bodyReader()
 
-    // MUST contain responseKeyword
-    if (monitor.responseKeyword && !responseBody.includes(monitor.responseKeyword)) {
-      console.log(
-        `${monitor.name} expected keyword ${
-          monitor.responseKeyword
-        }, not found in response (truncated to 100 chars): ${responseBody.slice(0, 100)}`
-      )
-      return "HTTP response doesn't contain the configured keyword"
-    }
+    console.log(`[${monitor.id}] HTTP check status=${res.status}`)
 
     // MUST NOT contain responseForbiddenKeyword
     if (
@@ -166,43 +158,27 @@ export async function getStatusWithGlobalPing(
     }
 
     const measurementId = measurementResponse.id
-    console.log(
-      `Measurement created successfully, id: ${measurementId}, time elapsed: ${
-        Date.now() - startTime
-      }ms`
-    )
-
-    const pollStart = Date.now()
     let measurementResult: any
+    const pollStart = Date.now()
     while (true) {
-      if (Date.now() - pollStart > (monitor.timeout ?? 10000) + 2000) {
-        // 2s extra buffer
+      if (Date.now() - pollStart > 15000) {
         throw 'api polling timeout'
       }
 
-      measurementResult = (await (
-        await fetchTimeout(`https://api.globalping.io/v1/measurements/${measurementId}`, 5000)
-      ).json()) as any
-      if (measurementResult.status !== 'in-progress') {
-        break
-      }
-
+      const pollRes = await fetchTimeout(`https://api.globalping.io/v1/measurements/${measurementId}`, 5000)
+      console.log(`[${monitor.id}] GlobalPing status=${pollRes.status}`)
+      measurementResult = (await pollRes.json()) as any
+      if (measurementResult.status !== 'in-progress') break
       await new Promise((resolve) => setTimeout(resolve, 1000))
     }
 
-    console.log(
-      `Measurement ${measurementId} finished with response: ${JSON.stringify(
-        measurementResult
-      )}, time elapsed: ${Date.now() - pollStart}ms`
-    )
+    console.log(`[${monitor.id}] Measurement finished`)
 
     if (
       measurementResult.status !== 'finished' ||
       measurementResult.results[0].result.status !== 'finished'
     ) {
-      console.log(
-        `measurement failed with status: ${measurementResult.status}, result status: ${measurementResult.results[0].result.status}`
-      )
+      console.log(`[${monitor.id}] Measurement failed with status: ${measurementResult.status}`)
       // Truncate raw output to avoid huge error messages
       throw `status [${measurementResult.status}|${
         measurementResult.results[0].result.status
@@ -251,14 +227,15 @@ export async function getStatusWithGlobalPing(
         },
       }
     }
-  } catch (e: any) {
-    console.log(`Globalping ${monitor.name} errored with ${e}`)
+  } catch (e: unknown) {
+    const errName = e instanceof Error ? e.name : 'UnknownError'
+    console.log(`[${monitor.id}] GlobalPing error: ${errName}`)
     return {
       location: 'ERROR',
       status: {
-        ping: e.toString().toLowerCase().includes('timeout') ? monitor.timeout ?? 10000 : 0,
+        ping: e instanceof Error && e.message.toLowerCase().includes('timeout') ? monitor.timeout ?? 10000 : 0,
         up: false,
-        err: 'Globalping error: ' + e.toString(),
+        err: e instanceof Error ? e.message : 'Globalping check error',
       },
     }
   }
@@ -359,53 +336,46 @@ export async function doMonitor(monitor: MonitorTarget, defaultLocation: string,
   let status
 
   if (monitor.checkProxy) {
-    // Initiate a check using proxy (Geo-specific monitoring)
-    try {
-      console.log(`[${monitor.id}] Calling check proxy: ${monitor.checkProxy}`)
-      let resp
-      if (monitor.checkProxy.startsWith('worker://')) {
-        const doLoc = monitor.checkProxy.replace('worker://', '')
-        const doId = env.REMOTE_CHECKER_DO.idFromName(monitor.id)
-        const doStub = env.REMOTE_CHECKER_DO.get(doId, {
-          locationHint: doLoc as DurableObjectLocationHint,
-        })
-        resp = await doStub.getLocationAndStatus(monitor)
-        try {
-          // Kill the DO instance after use, to avoid extra resource usage
-          await doStub.kill()
-        } catch (err) {
-          // An error here is expected, ignore it
-        }
-      } else if (monitor.checkProxy.startsWith('globalping://')) {
-        resp = await getStatusWithGlobalPing(monitor)
-      } else {
-        resp = await (
-          await fetch(monitor.checkProxy, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(monitor),
+    if (!monitor.checkProxy.startsWith('worker://') && !monitor.checkProxy.startsWith('globalping://')) {
+      console.log(`[${monitor.id}] Unsupported check proxy scheme`)
+      status = { ping: 0, up: false, err: 'Unsupported check proxy scheme' }
+    } else {
+      try {
+        console.log(`[${monitor.id}] Calling check proxy`)
+        let resp
+        if (monitor.checkProxy.startsWith('worker://')) {
+          const doLoc = monitor.checkProxy.replace('worker://', '')
+          const doId = env.REMOTE_CHECKER_DO.idFromName(monitor.id)
+          const doStub = env.REMOTE_CHECKER_DO.get(doId, {
+            locationHint: doLoc as DurableObjectLocationHint,
           })
-        ).json<{ location: string; status: { ping: number; up: boolean; err: string } }>()
-      }
-      checkLocation = resp.location
-      status = resp.status
-    } catch (err) {
-      console.log(`[${monitor.id}] Error calling proxy: ${err}`)
-      if (monitor.checkProxyFallback) {
-        console.log('Falling back to local check...')
-        status = await getStatus(monitor)
-      } else {
-        // TODO: more consistent error handling (throw or return?)
-        status = { ping: 0, up: false, err: 'Unknown check proxy error' }
+          resp = await doStub.getLocationAndStatus(monitor)
+          try {
+            await doStub.kill()
+          } catch {
+            // Expected kill failure on teardown, ignore.
+          }
+        } else {
+          resp = await getStatusWithGlobalPing(monitor)
+        }
+        checkLocation = resp.location
+        status = resp.status
+      } catch (err: unknown) {
+        const errName = err instanceof Error ? err.name : 'UnknownError'
+        console.log(`[${monitor.id}] Proxy check error: ${errName}`)
+        if (monitor.checkProxyFallback) {
+          console.log(`[${monitor.id}] Falling back to local check...`)
+          status = await getStatus(monitor)
+        } else {
+          status = { ping: 0, up: false, err: 'Check proxy error' }
+        }
       }
     }
   } else {
-    // Initiate a check from the current location
     status = await getStatus(monitor)
   }
 
-  console.log(`[${monitor.id}] Check result from ${checkLocation}: up=${status.up}, ping=${status.ping}, err=${status.err}`)
-
+  console.log(`[${monitor.id}] Check result: up=${status.up}, ping=${status.ping}`)
   return {
     location: checkLocation,
     status,

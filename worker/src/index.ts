@@ -9,6 +9,8 @@ import pLimit from 'p-limit'
 export interface Env {
   REMOTE_CHECKER_DO: DurableObjectNamespace<RemoteChecker>
   UPTIMEFLARE_D1: D1Database
+  TELEGRAM_BOT_TOKEN: string
+  TELEGRAM_CHAT_ID: string
 }
 
 const Worker = {
@@ -174,9 +176,9 @@ const Worker = {
               status.err
             )
           }
-        } catch (e) {
-          console.log('Error calling callback: ')
-          console.log(e)
+        } catch (e: unknown) {
+          const errName = e instanceof Error ? e.name : 'UnknownError'
+          console.log(`onStatusChange callback error: ${errName}`)
         }
 
         try {
@@ -188,9 +190,9 @@ const Worker = {
             currentTimeSecond,
             status.err
           )
-        } catch (e) {
-          console.log('Error calling callback: ')
-          console.log(e)
+        } catch (e: unknown) {
+          const errName = e instanceof Error ? e.name : 'UnknownError'
+          console.log(`onIncident callback error: ${errName}`)
         }
       }
 
@@ -260,7 +262,7 @@ export class RemoteChecker extends DurableObject {
   async getLocationAndStatus(
     monitor: MonitorTarget
   ): Promise<{ location: string; status: { ping: number; up: boolean; err: string } }> {
-    const colo = (await getWorkerLocation()) as string
+    const colo = (await getWorkerLocation()) || 'ERROR'
     console.log(`Running remote checker (DurableObject) at ${colo}...`)
     const status = await getStatus(monitor)
     return {

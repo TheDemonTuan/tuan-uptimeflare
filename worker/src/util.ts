@@ -1,12 +1,16 @@
 import { MonitorTarget, WebhookConfig } from '../../types/config'
-import { maintenances, workerConfig } from '../../uptime.config'
+import { workerConfig } from '../../uptime.config'
+import { maintenances } from '../../page.config'
 
 async function getWorkerLocation() {
-  const res = await fetch('https://cloudflare.com/cdn-cgi/trace')
-  const text = await res.text()
-
-  const colo = /^colo=(.*)$/m.exec(text)?.[1]
-  return colo
+  try {
+    const res = await fetch('https://cloudflare.com/cdn-cgi/trace', { signal: AbortSignal.timeout(5000) })
+    if (!res.ok) return undefined
+    const text = await res.text()
+    return /^colo=(.*)$/m.exec(text)?.[1]
+  } catch {
+    return undefined
+  }
 }
 
 const fetchTimeout = (
@@ -87,9 +91,7 @@ async function webhookNotify(webhook: WebhookConfig, message: string) {
     return
   }
 
-  console.log(
-    'Sending webhook notification: ' + JSON.stringify(message) + ' to webhook ' + webhook.url
-  )
+  console.log('Sending webhook notification')
   try {
     let url = webhook.url
     let method = webhook.method
@@ -127,22 +129,17 @@ async function webhookNotify(webhook: WebhookConfig, message: string) {
         throw 'Unrecognized payload type: ' + webhook.payloadType
     }
 
-    console.log(
-      `Webhook finalized parameters: ${method} ${url}, headers ${JSON.stringify(
-        Object.fromEntries(headers.entries())
-      )}, body ${JSON.stringify(body)}`
-    )
     const resp = await fetchTimeout(url, webhook.timeout ?? 5000, { method, headers, body })
-
     if (!resp.ok) {
-      console.log(
-        'Error calling webhook server, code: ' + resp.status + ', response: ' + (await resp.text())
-      )
+      console.log(`Webhook failed: status=${resp.status}`)
+      await resp.body?.cancel().catch(() => {})
     } else {
-      console.log('Webhook notification sent successfully, code: ' + resp.status)
+      console.log(`Webhook succeeded: status=${resp.status}`)
+      await resp.body?.cancel().catch(() => {})
     }
-  } catch (e) {
-    console.log('Error calling webhook server: ' + e)
+  } catch (e: unknown) {
+    const errName = e instanceof Error ? e.name : 'UnknownError'
+    console.log(`Webhook error: ${errName}`)
   }
 }
 

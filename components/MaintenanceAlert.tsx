@@ -1,23 +1,25 @@
-import { Alert, List, Text, useMantineTheme } from '@mantine/core'
-import { useMediaQuery } from '@mantine/hooks'
+import { Alert, List, Text } from '@mantine/core'
 import { IconAlertTriangle } from '@tabler/icons-react'
-import { MaintenanceConfig, MonitorTarget } from '@/types/config'
-import { pageConfig } from '@/uptime.config'
+import type { MaintenanceConfig, PublicMonitor } from '@/types/config'
+import { pageConfig } from '@/page.config'
 import { useTranslation } from 'react-i18next'
+import { formatDateTime, useTimeZone } from '@/util/time'
+import type { Locale } from '@/util/i18n'
 
 export default function MaintenanceAlert({
   maintenance,
+  configured,
   style,
   upcoming = false,
 }: {
-  maintenance: Omit<MaintenanceConfig, 'monitors'> & { monitors?: (MonitorTarget | undefined)[] }
+  maintenance: MaintenanceConfig
+  configured: PublicMonitor[]
   style?: React.CSSProperties
   upcoming?: boolean
 }) {
-  const { t } = useTranslation('common')
-  const theme = useMantineTheme()
-  const isDesktop = useMediaQuery(`(min-width: ${theme.breakpoints.sm})`)
-
+  const { t, i18n } = useTranslation('common')
+  const timeZone = useTimeZone()
+  const formatDate = (value: string | number) => formatDateTime(new Date(value).getTime() / 1000, i18n.language as Locale, timeZone)
   return (
     <Alert
       icon={<IconAlertTriangle />}
@@ -37,55 +39,26 @@ export default function MaintenanceAlert({
       withCloseButton={false}
       style={{ margin: '16px auto 0 auto', ...style }}
     >
-      {/* Date range in top right (desktop) or inline (mobile) */}
-      <div
-        style={{
-          ...{
-            top: 10,
-            fontSize: '0.85rem',
-            borderRadius: 6,
-          },
-          ...(isDesktop
-            ? {
-                position: 'absolute',
-                right: 10,
-                padding: '2px 8px',
-                textAlign: 'right',
-              }
-            : { marginBottom: 4 }),
-        }}
-      >
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'auto 1fr',
-            gridColumnGap: '3px',
-          }}
-        >
+      <div style={{ fontSize: '0.85rem', marginBottom: 4 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '2px 8px' }}>
           <div style={{ textAlign: 'right', fontWeight: 'bold' }}>
             {upcoming ? t('Scheduled for') : t('From')}
           </div>
-          <div>{new Date(maintenance.start).toLocaleString()}</div>
+          <div>{formatDate(maintenance.start)}</div>
           <div style={{ textAlign: 'right', fontWeight: 'bold' }}>
             {upcoming ? t('Expected end') : t('To')}
           </div>
-          <div>
-            {maintenance.end
-              ? new Date(maintenance.end).toLocaleString()
-              : t('Until further notice')}
-          </div>
+          <div>{maintenance.end ? formatDate(maintenance.end) : t('Until further notice')}</div>
         </div>
       </div>
 
       <Text style={{ paddingTop: '3px', whiteSpace: 'pre-line' }}>{maintenance.body}</Text>
       {maintenance.monitors && maintenance.monitors.length > 0 && (
         <>
-          <Text mt="xs">
-            <b>{t('Affected components')}</b>
-          </Text>
+          <Text mt="xs"><b>{t('Affected components')}</b></Text>
           <List size="sm" withPadding>
-            {maintenance.monitors.map((comp, compIdx) => (
-              <List.Item key={compIdx}>{comp?.name ?? t('MONITOR ID NOT FOUND')}</List.Item>
+            {maintenance.monitors.map((id) => (
+              <List.Item key={id}>{configured.find((monitor) => monitor.id === id)?.name ?? id}</List.Item>
             ))}
           </List>
         </>

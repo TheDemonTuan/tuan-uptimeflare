@@ -10,6 +10,8 @@
 
 # next.js
 /.next/
+/.open-next/
+/.tmp/
 /out/
 
 # production
@@ -26,6 +28,10 @@ yarn-error.log*
 
 # local env files
 .env*.local
+.env
+.dev.vars*
+*.tfvars
+*.tfvars.json
 
 # vercel
 .vercel

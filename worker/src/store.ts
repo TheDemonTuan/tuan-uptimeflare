@@ -1,18 +1,77 @@
-import { Env } from '.'
-import {
-  IncidentRecord,
-  LatencyRecord,
-  MonitorState,
-  MonitorStateCompacted,
-} from '../../types/config'
+import type { Env } from '.'
+import type { IncidentRecord, LatencyRecord, MonitorState, MonitorStateCompacted } from '../../types/config'
 
-export async function getFromStore(env: Env, key: string): Promise<string | null> {
+function decodeHex(hex: string): Uint8Array {
+  const fromHex = (Uint8Array as typeof Uint8Array & { fromHex?: (value: string) => Uint8Array }).fromHex
+  if (fromHex) return fromHex(hex)
+  const bytes = new Uint8Array(hex.length / 2)
+  for (let i = 0; i < hex.length; i += 2) bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16)
+  return bytes
+}
+
+function encodeHex(bytes: Uint8Array): string {
+  const toHex = (bytes as Uint8Array & { toHex?: () => string }).toHex
+  if (toHex) return toHex.call(bytes)
+  let hex = ''
+  for (const byte of bytes) hex += byte.toString(16).padStart(2, '0')
+  return hex
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isNonNegativeNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+}
+
+function validateCompact(data: unknown): asserts data is MonitorStateCompacted {
+  if (!isRecord(data) || !isNonNegativeNumber(data.lastUpdate) ||
+      !isNonNegativeNumber(data.overallUp) || !isNonNegativeNumber(data.overallDown) ||
+      !isRecord(data.incident) || !isRecord(data.latency)) {
+    throw new Error('Invalid compact monitor state')
+  }
+
+  for (const entry of Object.values(data.incident)) {
+    if (!isRecord(entry) || !Array.isArray(entry.start) || !Array.isArray(entry.end) ||
+        !Array.isArray(entry.error) || entry.start.length !== entry.end.length ||
+        entry.start.length !== entry.error.length) throw new Error('Invalid compact incident columns')
+    for (let i = 0; i < entry.start.length; i++) {
+      const start = entry.start[i]
+      const errors = entry.error[i]
+      if (!Array.isArray(start) || !start.length || !start.every(isNonNegativeNumber) ||
+          !Array.isArray(errors) || errors.length !== start.length ||
+          !errors.every((error) => typeof error === 'string') ||
+          !(entry.end[i] === null || isNonNegativeNumber(entry.end[i]))) {
+        throw new Error('Invalid compact incident record')
+      }
+    }
+  }
+
+  for (const entry of Object.values(data.latency)) {
+    if (!isRecord(entry) || typeof entry.time !== 'string' || typeof entry.ping !== 'string' ||
+        entry.time.length % 8 !== 0 || entry.ping.length % 4 !== 0 ||
+        entry.time.length / 8 !== entry.ping.length / 4 ||
+        !/^[0-9a-f]*$/i.test(entry.time) || !/^[0-9a-f]*$/i.test(entry.ping) ||
+        !isRecord(entry.loc) || !Array.isArray(entry.loc.c) || !Array.isArray(entry.loc.v) ||
+        entry.loc.c.length !== entry.loc.v.length) throw new Error('Invalid compact latency columns')
+    let count = 0
+    for (let i = 0; i < entry.loc.c.length; i++) {
+      if (!Number.isSafeInteger(entry.loc.c[i]) || entry.loc.c[i] <= 0 ||
+          typeof entry.loc.v[i] !== 'string') throw new Error('Invalid compact latency locations')
+      count += entry.loc.c[i]
+    }
+    if (count !== entry.time.length / 8) throw new Error('Invalid compact latency lengths')
+  }
+}
+
+export async function getFromStore(env: Pick<Env, 'UPTIMEFLARE_D1'>, key: string): Promise<string | null> {
   const stmt = env.UPTIMEFLARE_D1.prepare('SELECT value FROM uptimeflare WHERE key = ?')
   const result = await stmt.bind(key).first<{ value: string }>()
   return result?.value || null
 }
 
-export async function setToStore(env: Env, key: string, value: string): Promise<void> {
+export async function setToStore(env: Pick<Env, 'UPTIMEFLARE_D1'>, key: string, value: string): Promise<void> {
   const stmt = env.UPTIMEFLARE_D1.prepare(
     'INSERT INTO uptimeflare (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;'
   )
@@ -34,7 +93,9 @@ export class CompactedMonitorStateWrapper {
       }
       return
     }
-    this.data = JSON.parse(compactedStateStr)
+    const parsed: unknown = JSON.parse(compactedStateStr)
+    validateCompact(parsed)
+    this.data = parsed
   }
 
   getCompactedStateStr(): string {
@@ -43,80 +104,41 @@ export class CompactedMonitorStateWrapper {
 
   // Don't use this method at server-side
   uncompact(): MonitorState {
-    let state: MonitorState = {
+    const state: MonitorState = {
       lastUpdate: this.data.lastUpdate,
       overallUp: this.data.overallUp,
       overallDown: this.data.overallDown,
       incident: {},
       latency: {},
     }
+    for (const monitorId of Object.keys(this.data.incident)) {
+      const incidents = this.data.incident[monitorId]
+      state.incident[monitorId] = incidents.start.map((start, index) => ({
+        start,
+        end: incidents.end[index],
+        error: incidents.error[index],
+      }))
+    }
+    for (const monitorId of Object.keys(this.data.latency)) {
+      state.latency[monitorId] = this.getLatencyRecords(monitorId)
+    }
+    return state
+  }
 
-    const hex2Uint8Arr = (hex: string): Uint8Array => {
-      // @ts-expect-error This method is not available in Node.js 22.x, but available in Cloudflare Workers and new browsers
-      if (Uint8Array.fromHex) {
-        // @ts-expect-error
-        return Uint8Array.fromHex(hex)
-      } else {
-        console.warn('Uint8Array.fromHex is not available, using parseInt as fallback. Consider upgrading your browser.')
-        const ret = new Uint8Array(hex.length / 2)
-        for (let i = 0; i < hex.length; i += 2) {
-          ret[i / 2] = parseInt(hex.slice(i, i + 2), 16)
-        }
-        return ret
+  getLatencyRecords(monitorId: string): LatencyRecord[] {
+    const latencies = this.data.latency[monitorId]
+    if (!latencies) return []
+    const times = new Uint32Array(decodeHex(latencies.time).buffer)
+    const pings = new Uint16Array(decodeHex(latencies.ping).buffer)
+    const records: LatencyRecord[] = new Array(times.length)
+    let index = 0
+    for (let i = 0; i < latencies.loc.c.length; i++) {
+      for (let j = 0; j < latencies.loc.c[i]; j++) {
+        records[index] = { time: times[index], ping: pings[index], loc: latencies.loc.v[i] }
+        index++
       }
     }
-
-    Object.keys(this.data.incident).forEach((monitorId) => {
-      state.incident[monitorId] = []
-      const incidents = this.data.incident[monitorId]
-
-      if (
-        incidents.start.length !== incidents.end.length ||
-        incidents.start.length !== incidents.error.length
-      ) {
-        throw new Error(
-          'Inconsistent incident data lengths, please report an issue at https://github.com/lyc8503/UptimeFlare'
-        )
-      }
-
-      for (let i = 0; i < incidents.start.length; i++) {
-        state.incident[monitorId].push({
-          start: incidents.start[i],
-          end: incidents.end[i],
-          error: incidents.error[i],
-        })
-      }
-    })
-
-    Object.keys(this.data.latency).forEach((monitorId) => {
-      state.latency[monitorId] = []
-      const latencies = this.data.latency[monitorId]
-      const locUncompacted: string[] = []
-      latencies.loc.c.forEach((count, index) => {
-        for (let i = 0; i < count; i++) {
-          locUncompacted.push(latencies.loc.v[index])
-        }
-      })
-
-      const timeArr = new Uint32Array(hex2Uint8Arr(latencies.time).buffer)
-      const pingArr = new Uint16Array(hex2Uint8Arr(latencies.ping).buffer)
-
-      if (timeArr.length !== pingArr.length || timeArr.length !== locUncompacted.length) {
-        throw new Error(
-          'Inconsistent latency data lengths, please report an issue at https://github.com/lyc8503/UptimeFlare.'
-        )
-      }
-
-      for (let i = 0; i < timeArr.length; i++) {
-        state.latency[monitorId].push({
-          time: timeArr[i],
-          ping: pingArr[i],
-          loc: locUncompacted[i],
-        })
-      }
-    })
-
-    return state
+    return records
   }
 
   incidentLen(monitorId: string): number {
@@ -198,10 +220,8 @@ export class CompactedMonitorStateWrapper {
       latencies = this.data.latency[monitorId]
     }
 
-    // @ts-expect-error
-    latencies.time += new Uint8Array(new Uint32Array([record.time]).buffer).toHex()
-    // @ts-expect-error
-    latencies.ping += new Uint8Array(new Uint16Array([record.ping]).buffer).toHex()
+    latencies.time += encodeHex(new Uint8Array(new Uint32Array([record.time]).buffer))
+    latencies.ping += encodeHex(new Uint8Array(new Uint16Array([record.ping]).buffer))
 
     if (latencies.loc.v[latencies.loc.v.length - 1] !== record.loc) {
       latencies.loc.c.push(1)
@@ -212,25 +232,21 @@ export class CompactedMonitorStateWrapper {
   }
 
   getFirstLatency(monitorId: string): LatencyRecord {
-    let latencies = this.data.latency[monitorId]
-
+    const latencies = this.data.latency[monitorId]
+    if (!latencies?.time.length) throw new Error('No latency records for monitor')
     return {
-      // @ts-expect-error
-      time: new Uint32Array(Uint8Array.fromHex(latencies.time.slice(0, 8)).buffer)[0],
-      // @ts-expect-error
-      ping: new Uint16Array(Uint8Array.fromHex(latencies.ping.slice(0, 4)).buffer)[0],
+      time: new Uint32Array(decodeHex(latencies.time.slice(0, 8)).buffer)[0],
+      ping: new Uint16Array(decodeHex(latencies.ping.slice(0, 4)).buffer)[0],
       loc: latencies.loc.v[0],
     }
   }
 
   getLastLatency(monitorId: string): LatencyRecord {
-    let latencies = this.data.latency[monitorId]
-
+    const latencies = this.data.latency[monitorId]
+    if (!latencies?.time.length) throw new Error('No latency records for monitor')
     return {
-      // @ts-expect-error
-      time: new Uint32Array(Uint8Array.fromHex(latencies.time.slice(-8)).buffer)[0],
-      // @ts-expect-error
-      ping: new Uint16Array(Uint8Array.fromHex(latencies.ping.slice(-4)).buffer)[0],
+      time: new Uint32Array(decodeHex(latencies.time.slice(-8)).buffer)[0],
+      ping: new Uint16Array(decodeHex(latencies.ping.slice(-4)).buffer)[0],
       loc: latencies.loc.v[latencies.loc.v.length - 1],
     }
   }

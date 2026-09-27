@@ -1,40 +1,8 @@
-import { MaintenanceConfig, PageConfig, WorkerConfig } from './types/config'
-
-const pageConfig: PageConfig = {
-  // Title for your status page
-  title: "lyc8503's Status Page",
-  // Links shown at the header of your status page, could set `highlight` to `true`
-  links: [
-    { link: 'https://github.com/lyc8503', label: 'GitHub' },
-    { link: 'https://blog.lyc8503.net/', label: 'Blog' },
-    { link: 'mailto:me@lyc8503.net', label: 'Email Me', highlight: true },
-  ],
-  // [OPTIONAL] Group your monitors
-  // If not specified, all monitors will be shown in a single list
-  // If specified, monitors will be grouped and ordered, not-listed monitors will be invisble (but still monitored)
-  group: {
-    '🌐 Public (example group name)': ['foo_monitor', 'bar_monitor', 'more monitor ids...'],
-    '🔐 Private': ['test_tcp_monitor'],
-  },
-  // [OPTIONAL] Set the path to your favicon, default to '/favicon.png' if not specified
-  // favicon: 'https://example.com/favicon.ico',
-  // [OPTIONAL] Set the path to your logo, default to '/logo.svg' if not specified
-  // logo: 'https://example.com/logo.svg',
-  // [OPTIONAL] Maintenance related settings
-  maintenances: {
-    // [OPTIONAL] The color of upcoming maintenance alerts, default to 'gray'
-    // Active alerts will always use the color specified in the MaintenanceConfig
-    upcomingColor: 'gray',
-  },
-  // [OPTIONAL] Custom footer html
-  // customFooter: '',
-}
+import type { WorkerConfig } from './types/config'
 
 const workerConfig: WorkerConfig = {
   // [Optional] Write KV at most every N minutes unless the status changed, default to 3
   kvWriteCooldownMinutes: 3,
-  // Enable HTTP Basic auth for status page & API by uncommenting the line below, format `<USERNAME>:<PASSWORD>`
-  // passwordProtection: 'username:password',
   // Define all your monitors here
   monitors: [
     // Example HTTP Monitor
@@ -68,10 +36,8 @@ const workerConfig: WorkerConfig = {
       responseKeyword: 'success',
       // [OPTIONAL] if specified, the response must NOT contains the keyword to be considered as operational.
       responseForbiddenKeyword: 'bad gateway',
-      // [OPTIONAL] if specified, will call the check proxy to check the monitor, mainly for geo-specific checks
-      // refer to docs https://github.com/lyc8503/UptimeFlare/wiki/Check-proxy-setup before setting this value
-      // currently supports `worker://`, `globalping://` and `http(s)://` proxies
-      checkProxy: 'https://xxx.example.com OR worker://weur',
+      // Optional geographical check through a Worker Durable Object or Globalping.
+      checkProxy: 'worker://weur',
       // [OPTIONAL] if true, the check will fallback to local if the specified proxy is down
       checkProxyFallback: true,
     },
@@ -154,53 +120,5 @@ const workerConfig: WorkerConfig = {
   },
 }
 
-// You can define multiple maintenances here
-// During maintenance, an alert will be shown at status page
-// Also, related downtime notifications will be skipped (if any)
-// Of course, you can leave it empty if you don't need this feature
-// const maintenances: MaintenanceConfig[] = []
-const maintenances: MaintenanceConfig[] = [
-  {
-    // [Optional] Monitor IDs to be affected by this maintenance
-    monitors: ['foo_monitor', 'bar_monitor'],
-    // [Optional] default to "Scheduled Maintenance" if not specified
-    title: 'Test Maintenance',
-    // Description of the maintenance, will be shown at status page
-    body: 'This is a test maintenance, server software upgrade',
-    // Start time of the maintenance, in UNIX timestamp or ISO 8601 format
-    start: '2025-04-27T00:00:00+08:00',
-    // [Optional] end time of the maintenance, in UNIX timestamp or ISO 8601 format
-    // if not specified, the maintenance will be considered as on-going
-    end: '2025-04-30T00:00:00+08:00',
-    // [Optional] color of the maintenance alert at status page, default to "yellow"
-    color: 'blue',
-  },
-  // As this config file is a TypeScript file, you can even use IIFE to generate scheduled maintenances
-  // The following example shows a scheduled maintenance from 2 AM to 4 AM on the 15th of every month (UTC+8)
-  // This COULD BE DANGEROUS, as generating too many maintenance entries can lead to performance problems
-  // Undeterministic outputs may also lead to bugs or unexpected behavior
-  // If you don't know how to DEBUG, use this approach WITH CAUTION
-  ...(function () {
-    const schedules = []
-    const today = new Date()
+export { workerConfig }
 
-    for (let i = -1; i <= 1; i++) {
-      // JavaScript's Date object will automatically handle year rollovers
-      const date = new Date(today.getFullYear(), today.getMonth() + i, 15)
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-
-      schedules.push({
-        title: `${year}/${parseInt(month)} - Test scheduled maintenance`,
-        monitors: ['foo_monitor'],
-        body: 'Monthly scheduled maintenance',
-        start: `${year}-${month}-15T02:00:00.000+08:00`,
-        end: `${year}-${month}-15T04:00:00.000+08:00`,
-      })
-    }
-    return schedules
-  })(),
-]
-
-// Don't forget this, otherwise compilation fails.
-export { maintenances, pageConfig, workerConfig }

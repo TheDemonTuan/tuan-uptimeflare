@@ -43,13 +43,20 @@ export type MonitorTarget = {
   body?: string
   responseKeyword?: string
   responseForbiddenKeyword?: string
-  checkProxy?: string
+  checkProxy?: `worker://${string}` | `globalping://${string}`
   checkProxyFallback?: boolean
+}
+
+export type PublicMonitor = Pick<MonitorTarget, 'id' | 'name' | 'tooltip' | 'statusPageLink' | 'hideLatencyChart'>
+
+export type DashboardSnapshot = {
+  compactedStateStr: string | null
+  monitors: PublicMonitor[]
+  renderedAt: number
 }
 
 export type WorkerConfig<TEnv = Env> = {
   kvWriteCooldownMinutes?: number
-  passwordProtection?: string
   monitors: MonitorTarget[]
   notification?: Notification
   callbacks?: Callbacks<TEnv>

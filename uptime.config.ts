@@ -1,17 +1,6 @@
 // UptimeFlare configuration for tuannguyenviet.site.
 // Keep credentials out of this file: monitor config is part of the deployment bundle.
-import { MaintenanceConfig, PageConfig, WorkerConfig } from './types/config'
-
-const pageConfig: PageConfig = {
-  title: "Tuan Nguyen Viet Status",
-  links: [
-    { link: 'https://github.com/TheDemonTuan', label: 'GitHub' },
-  ],
-  group: {
-    Public: ['nine_router_api', 'transactions'],
-    Infrastructure: ['beszel_hub'],
-  },
-}
+import type { WorkerConfig } from './types/config'
 
 const workerConfig: WorkerConfig = {
   monitors: [
@@ -42,12 +31,27 @@ const workerConfig: WorkerConfig = {
       responseKeyword: '"code":200',
     },
   ],
-  notification: {
-    // Add a reviewed webhook through the deployment process before enabling alerts.
-    // Do not commit bot tokens or other credentials here.
+  callbacks: {
+    onStatusChange: async (env, monitor, isUp, timeIncidentStart, timeNow, reason) => {
+      // Only the first failed check opens an incident; ignore error changes and recovery.
+      if (isUp || timeIncidentStart !== timeNow) return
+      if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) {
+        throw new Error('Telegram Worker secrets are missing')
+      }
+      const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        body: new URLSearchParams({
+          chat_id: env.TELEGRAM_CHAT_ID,
+          text: `🔴 ${monitor.name} is down. Issue: ${reason || 'unspecified'}`,
+        }),
+        signal: AbortSignal.timeout(5000),
+      }).catch(() => {
+        throw new Error('Telegram request failed')
+      })
+      if (!response.ok) throw new Error(`Telegram notification failed: HTTP ${response.status}`)
+    },
   },
 }
 
-const maintenances: MaintenanceConfig[] = []
+export { workerConfig }
 
-export { maintenances, pageConfig, workerConfig }

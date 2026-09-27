@@ -65,10 +65,26 @@ compacted_state = {
 }
 compacted_state_str = json.dumps(compacted_state)
 
-print("Original state: ", original_state[:256] + "..." if len(original_state) > 256 else original_state)
-print("Compacted state: ", compacted_state_str[:256] + "..." if len(compacted_state_str) > 256 else compacted_state_str)
 
-# Write compacted state to D1
+# Check whether D1 already has state before inserting
+check = requests.post(
+    api_endpoint + f"/d1/database/{d1_id}/query",
+    headers=headers,
+    json={
+        "sql": "SELECT value FROM uptimeflare WHERE key = 'state'",
+        "params": []
+    }
+).json()
+
+if not check['success']:
+    print("Error querying D1 database.")
+    exit(1)
+
+if check['result'][0]['results']:
+    print("D1 already contains state. Migration skipped.")
+    exit(0)
+
+# Write compacted state to D1 without overwriting
 r = requests.post(
     api_endpoint + f"/d1/database/{d1_id}/query",
     headers=headers,
@@ -79,20 +95,27 @@ r = requests.post(
 ).json()
 
 if not r['success']:
-    # UNIQUE constraint failed: uptimeflare.key: SQLITE_CONSTRAINT
-    if r['errors'][0]['code'] == 7500 and "UNIQUE" in r['errors'][0]['message']:
-        print("State probably already migrated to D1. Migration skipped.")
-    else:
-        print("Error writing state to D1: ", r)
-        print("Migration failed. Please report this issue at https://github.com/lyc8503/UptimeFlare/issues.")
+    print("Error writing state to D1.")
+    exit(1)
+
+# Read back and verify without printing state contents
+verify = requests.post(
+    api_endpoint + f"/d1/database/{d1_id}/query",
+    headers=headers,
+    json={
+        "sql": "SELECT value FROM uptimeflare WHERE key = 'state'",
+        "params": []
+    }
+).json()
+
+if not verify['success'] or not verify['result'][0]['results']:
+    print("Verification failed after migration.")
+    exit(1)
+
+written = json.loads(verify['result'][0]['results'][0]['value'])
+for field in ['lastUpdate', 'overallUp', 'overallDown', 'incident', 'latency']:
+    if field not in written:
+        print(f"Missing required field {field} after migration.")
         exit(1)
 
-print("State migrated to D1 successfully. Trying to delete unused KV namespace...")
-r = requests.delete(
-    api_endpoint + f"/storage/kv/namespaces/{kv_id}",
-    headers=headers
-).json()
-if r['success']:
-    print("KV namespace deleted successfully.")
-else:
-    print("Error deleting KV namespace: ", r)
+print("State migrated to D1 and verified successfully. KV namespace retained.")
