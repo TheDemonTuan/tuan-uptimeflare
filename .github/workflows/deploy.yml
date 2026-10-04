@@ -1,4 +1,4 @@
-name: Deploy to Cloudflare
+name: Build Cloudflare release
 
 on:
   push:
@@ -13,119 +13,48 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  build-release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.6.4
-
       - name: Use Node.js 24.x
         uses: actions/setup-node@v4
         with:
           node-version: 24.x
-          cache: 'npm'
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker/package-lock.json
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-
-      - name: Install Python dependencies
-        run: pip install requests
-
-      - name: Fetch Account ID
-        id: fetch_account_id
-        run: |
-          if [ -n "$CLOUDFLARE_ACCOUNT_ID_INPUT" ]; then
-            ACCOUNT_ID="$CLOUDFLARE_ACCOUNT_ID_INPUT"
-          else
-            RESP=$(curl -sS -f "https://api.cloudflare.com/client/v4/accounts" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
-            COUNT=$(echo "$RESP" | jq '.result | length')
-            if [ "$COUNT" -ne 1 ]; then
-              echo "Expected exactly 1 Cloudflare account for token, found $COUNT. Set CLOUDFLARE_ACCOUNT_ID secret."
-              exit 1
-            fi
-            ACCOUNT_ID=$(echo "$RESP" | jq -r '.result[0].id')
-          fi
-          echo "account_id=$ACCOUNT_ID" >> "$GITHUB_OUTPUT"
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID_INPUT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Install packages
+      - name: Install dependencies
         run: |
           npm ci
           npm --prefix worker ci
-
-      - name: Build monitoring worker
-        run: npm --prefix worker run deploy -- --dry-run --outdir dist
-
-      - name: Resolve D1 database
-        env:
-          UPTIMEFLARE_D1_ID: ${{ vars.UPTIMEFLARE_D1_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ steps.fetch_account_id.outputs.account_id }}
+      - name: Verify application
         run: |
-          if [ -n "$UPTIMEFLARE_D1_ID" ]; then
-            printf 'D1_ID=%s\n' "$UPTIMEFLARE_D1_ID" >> "$GITHUB_ENV"
-            echo 'Using the configured UptimeFlare D1 database.'
-          else
-            python3 deploy/init_d1.py
-          fi
-
-      - name: Inject production D1 ID into local workspace configs
+          npm run typecheck
+          npm run lint
+          npm run check
+          bun test tests/monitoring.test.ts
+          python3 -m unittest discover -s deploy/tests -p 'test_package_release.py' -v
+      - name: Compile monitoring Worker without credentials
+        run: npm --prefix worker run build
+      - name: Build OpenNext once and compile runtime modules
         run: |
-          sed -i "s/database_id = \"00000000-0000-0000-0000-000000000000\"/database_id = \"$D1_ID\"/g" wrangler.toml worker/wrangler.toml
-        env:
-          D1_ID: ${{ env.D1_ID }}
-
-      - name: Deploy infrastructure with Terraform
-        shell: bash
-        run: |
-          for name in CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET BESZEL_ACCESS_CLIENT_ID BESZEL_ACCESS_CLIENT_SECRET TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID; do
-            if [ -z "${!name}" ]; then echo "Missing required secret: $name" >&2; exit 1; fi
-          done
-          terraform init
-          DO_RESP=$(curl -sS -f "https://api.cloudflare.com/client/v4/accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/workers/durable_objects/namespaces?per_page=1000" \
-            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
-          if echo "$DO_RESP" | jq -e '.result[] | select(.script == "uptimeflare_worker" and .class == "RemoteChecker")' > /dev/null; then
-            echo "Existing RemoteChecker DO namespace found."
-          else
-            echo "Enabling DO migration flag."
-            export TF_VAR_enable_do_migration=true
-          fi
-
-          echo "Try importing existing resources..."
-          terraform import cloudflare_workers_script.uptimeflare_worker "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/uptimeflare_worker" || echo "WARNING: Worker script import failed, continuing..."
-          terraform import cloudflare_workers_cron_trigger.uptimeflare_worker_cron "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/uptimeflare_worker" || echo "WARNING: Cron trigger import failed, continuing..."
-          terraform plan -out=tfplan.binary -input=false
-          terraform show -json tfplan.binary > tfplan.json
-          python3 deploy/validate_plan.py tfplan.json
-          terraform apply -auto-approve -input=false tfplan.binary
-          rm -f tfplan.binary tfplan.json
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          TF_VAR_CLOUDFLARE_ACCOUNT_ID: ${{ steps.fetch_account_id.outputs.account_id }}
-          TF_VAR_UPTIMEFLARE_D1_ID: ${{ env.D1_ID }}
-          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
-          BESZEL_ACCESS_CLIENT_ID: ${{ secrets.BESZEL_ACCESS_CLIENT_ID }}
-          BESZEL_ACCESS_CLIENT_SECRET: ${{ secrets.BESZEL_ACCESS_CLIENT_SECRET }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TF_VAR_CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-          TF_VAR_CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
-          TF_VAR_BESZEL_ACCESS_CLIENT_ID: ${{ secrets.BESZEL_ACCESS_CLIENT_ID }}
-          TF_VAR_BESZEL_ACCESS_CLIENT_SECRET: ${{ secrets.BESZEL_ACCESS_CLIENT_SECRET }}
-          TF_VAR_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TF_VAR_TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-
-      - name: Build and deploy web worker
-        run: npm run deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ steps.fetch_account_id.outputs.account_id }}
+          npm run build:worker
+          node node_modules/wrangler/bin/wrangler.js deploy --dry-run --outdir web/dist
+      - name: Package immutable release
+        run: python3 deploy/package_release.py --sha "$GITHUB_SHA" --output "$RUNNER_TEMP/cloudflare-release"
+      - name: Upload central deployment input
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-uptimeflare-${{ github.sha }}
+          path: ${{ runner.temp }}/cloudflare-release/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30

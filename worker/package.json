@@ -4,7 +4,7 @@
   "private": true,
   "engines": { "node": ">=24 <25" },
   "scripts": {
-    "deploy": "wrangler deploy",
+    "build": "wrangler deploy --dry-run --outdir dist",
     "dev": "wrangler dev --test-scheduled --persist-to ../.wrangler/state",
     "start": "wrangler dev"
   },
