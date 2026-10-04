@@ -16,6 +16,7 @@
 
 # production
 /build
+/web/dist/
 
 # misc
 *.png
@@ -47,3 +48,5 @@ terraform.tfstate*
 *.tfvars
 *.tfvars.json
 /.wrangler
+__pycache__/
+*.pyc
