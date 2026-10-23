@@ -1,0 +1,77 @@
+name: Pull request CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate UptimeFlare
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Use Node.js 24.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker/package-lock.json
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install locked dependencies
+        run: |
+          npm ci
+          npm --prefix worker ci
+      - name: Check application types and lint
+        run: |
+          npm run typecheck
+          npm run lint
+      - name: Check monitoring Worker types
+        working-directory: worker
+        run: npx --no-install tsc --noEmit
+      - name: Run application and release regression tests
+        run: |
+          npm run check
+          bun test tests/monitoring.test.ts
+          python3 -m unittest discover -s deploy/tests -p 'test_package_release.py' -v
+      - name: Compile monitoring Worker without credentials
+        run: npm --prefix worker run build
+      - name: Build production OpenNext application and runtime modules
+        run: |
+          npm run build:worker
+          node node_modules/wrangler/bin/wrangler.js deploy --dry-run --outdir web/dist
+
+  required:
+    name: Required CI
+    if: ${{ always() }}
+    needs: [validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require successful validation
+        env:
+          VALIDATION_RESULT: ${{ needs.validate.result }}
+        run: |
+          if [ "$VALIDATION_RESULT" != "success" ]; then
+            echo "UptimeFlare validation did not succeed: $VALIDATION_RESULT"
+            exit 1
+          fi
