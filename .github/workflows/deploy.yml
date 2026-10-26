@@ -50,6 +50,8 @@ jobs:
           node node_modules/wrangler/bin/wrangler.js deploy --dry-run --outdir web/dist
       - name: Package immutable release
         run: python3 deploy/package_release.py --sha "$GITHUB_SHA" --output "$RUNNER_TEMP/cloudflare-release"
+      - name: Exercise packaged Cloudflare runtime without credentials
+        run: npm run check:runtime -- "$RUNNER_TEMP/cloudflare-release"
       - name: Upload central deployment input
         uses: actions/upload-artifact@v4
         with:
