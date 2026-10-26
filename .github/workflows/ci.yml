@@ -59,6 +59,10 @@ jobs:
         run: |
           npm run build:worker
           node node_modules/wrangler/bin/wrangler.js deploy --dry-run --outdir web/dist
+      - name: Package and exercise Cloudflare runtime without credentials
+        run: |
+          python3 deploy/package_release.py --sha "$GITHUB_SHA" --output "$RUNNER_TEMP/cloudflare-release"
+          npm run check:runtime -- "$RUNNER_TEMP/cloudflare-release"
 
   required:
     name: Required CI
