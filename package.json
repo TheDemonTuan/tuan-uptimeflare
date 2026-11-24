@@ -18,7 +18,7 @@
     "@mantine/hooks": "9.6.3",
     "@tabler/icons-react": "3.48.0",
     "chart.js": "4.5.1",
-    "i18next": "25.10.10",
+    "i18next": "26.3.4",
     "next": "16.4.5",
     "react": "19.3.0",
     "react-chartjs-2": "5.3.1",
