@@ -26,14 +26,14 @@ jobs:
       - name: Use Node.js 24.x
         uses: actions/setup-node@v4
         with:
-          node-version: 24.0.2
+          node-version: 24.22.3
           cache: npm
           cache-dependency-path: |
             package-lock.json
             worker/package-lock.json
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.4
+          bun-version: 1.4.5
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'

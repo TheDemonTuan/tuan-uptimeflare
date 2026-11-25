@@ -4,7 +4,8 @@ const pageConfig: PageConfig = {
   title: 'Tuan Nguyen Viet Status',
   links: [{ link: 'https://github.com/TheDemonTuan', label: 'GitHub' }],
   group: {
-    '9router': ['nine_router_api', 'nine_router_auth', 'nine_router_admin', 'nine_router_storage'],
+    OmniRoute: ['omniroute_api', 'omniroute_auth'],
+    'MC Hub': ['mc_hub_web', 'mc_hub_web_origin', 'mc_hub_api', 'mc_hub_posts'],
     'Other Services': ['transactions'],
     Infrastructure: ['beszel_hub', 'beszel_main_systems'],
   },

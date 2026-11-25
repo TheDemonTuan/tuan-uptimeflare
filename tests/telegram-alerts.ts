@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { workerConfig } from '../uptime.config'
 
 async function main() {
-  const monitor = workerConfig.monitors.find((item) => item.id === 'nine_router_api')
+  const monitor = workerConfig.monitors.find((item) => item.id === 'omniroute_api')
   assert(monitor)
 
   const onStatusChange = workerConfig.callbacks?.onStatusChange
@@ -19,7 +19,7 @@ async function main() {
     assert.equal(calls.length, 1)
     assert.equal(calls[0].url, 'https://api.telegram.org/bottest-token/sendMessage')
     assert.equal(new URLSearchParams(calls[0].body).get('chat_id'), 'test-chat')
-    assert.match(new URLSearchParams(calls[0].body).get('text')!, /9router API.*HTTP 503/)
+    assert.match(new URLSearchParams(calls[0].body).get('text')!, /OmniRoute API.*HTTP 503/)
     await onStatusChange(env, monitor, false, 100, 160, 'HTTP 502')
     await onStatusChange(env, monitor, true, 100, 220, 'OK')
     assert.equal(calls.length, 1)

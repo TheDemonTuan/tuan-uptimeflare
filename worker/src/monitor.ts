@@ -2,11 +2,7 @@ import { Env } from '.'
 import { MonitorTarget } from '../../types/config'
 import { withTimeout, fetchTimeout } from './util'
 
-const protectedTargets: Record<string, string> = {
-  nine_router_admin: 'https://9router-admin.tuannguyenviet.site/dashboard',
-  nine_router_storage: 'https://9router-admin.tuannguyenviet.site/api/monitor/ready',
-  beszel_hub: 'https://beszel.tuannguyenviet.site/api/health',
-}
+const beszelHealthTarget = 'https://beszel.tuannguyenviet.site/api/health'
 
 function isIpAddress(hostname: string): boolean {
   // `URL.hostname` strips brackets for IPv6, so a `:` reliably indicates an IPv6 literal here.
@@ -35,7 +31,7 @@ async function httpResponseBasicCheck(
   code: number,
   bodyReader: () => Promise<string>
 ): Promise<string | null> {
-  const protectedCheck = monitor.id in protectedTargets
+  const protectedCheck = monitor.id === 'beszel_hub'
   if (monitor.expectedCodes) {
     if (!monitor.expectedCodes.includes(code)) {
       return protectedCheck ? 'Protected check failed' : `Expected codes: ${JSON.stringify(monitor.expectedCodes)}, Got: ${code}`
@@ -266,7 +262,7 @@ export async function getStatus(
     err: 'Unknown',
   }
 
-  const protectedCheck = monitor.id in protectedTargets
+  const protectedCheck = monitor.id === 'beszel_hub'
   const startTime = Date.now()
 
   if (monitor.method === 'TCP_PING') {
@@ -304,7 +300,8 @@ export async function getStatus(
         headers.set('user-agent', 'UptimeFlare/1.0 (+https://github.com/lyc8503/UptimeFlare)')
       }
 
-      const response = await fetchTimeout(monitor.target, monitor.timeout || 10000, {
+      const response = await fetch(monitor.target, {
+        signal: AbortSignal.timeout(monitor.timeout || 10000),
         method: monitor.method,
         headers: headers,
         body: monitor.body,
@@ -339,7 +336,7 @@ export async function getStatus(
         status.err = 'Protected check failed'
       } else {
         console.log(`${monitor.name} errored with ${e.name}: ${e.message}`)
-        if (e.name === 'AbortError') {
+        if (e.name === 'AbortError' || e.name === 'TimeoutError') {
           status.ping = monitor.timeout || 10000
           status.up = false
           status.err = `Timeout after ${status.ping}ms`
@@ -357,12 +354,10 @@ export async function getStatus(
 export async function doMonitor(monitor: MonitorTarget, defaultLocation: string, env: Env) {
   let checkLocation = defaultLocation
   let status
-  if (monitor.id in protectedTargets) {
-    // ponytail: only these exact HTTPS endpoints accept Access credentials; review each new target.
-    const beszel = monitor.id === 'beszel_hub'
-    const clientId = beszel ? env.BESZEL_ACCESS_CLIENT_ID : env.CF_ACCESS_CLIENT_ID
-    const clientSecret = beszel ? env.BESZEL_ACCESS_CLIENT_SECRET : env.CF_ACCESS_CLIENT_SECRET
-    if (monitor.target !== protectedTargets[monitor.id] || monitor.checkProxy !== undefined ||
+  if (monitor.id === 'beszel_hub') {
+    const clientId = env.BESZEL_ACCESS_CLIENT_ID
+    const clientSecret = env.BESZEL_ACCESS_CLIENT_SECRET
+    if (monitor.target !== beszelHealthTarget || monitor.checkProxy !== undefined ||
         monitor.method !== 'GET' || monitor.body !== undefined || monitor.headers !== undefined ||
         !clientId || !clientSecret) {
       const status = { ping: 0, up: false, err: 'Protected check unavailable' }
@@ -377,7 +372,6 @@ export async function doMonitor(monitor: MonitorTarget, defaultLocation: string,
     })
     return { id: monitor.id, location: defaultLocation, status }
   }
-
 
   if (monitor.checkProxy) {
     if (!monitor.checkProxy.startsWith('worker://') && !monitor.checkProxy.startsWith('globalping://')) {
