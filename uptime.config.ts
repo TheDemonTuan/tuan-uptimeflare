@@ -69,13 +69,13 @@ const workerConfig: WorkerConfig = {
       timeout: 5000,
     },
     {
-      id: 'beszel_hub',
-      name: 'Beszel Hub',
+      id: 'fleet_monitor',
+      name: 'Fleet Monitor',
       method: 'GET',
-      target: 'https://beszel.tuannguyenviet.site/api/health',
+      target: 'https://monitor.thedemontuan.dev/api/health',
       expectedCodes: [200],
       timeout: 5000,
-      responseKeyword: '"code":200',
+      responseKeyword: '"database": "ok"',
     },
   ],
   callbacks: {
