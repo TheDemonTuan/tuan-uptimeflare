@@ -77,15 +77,6 @@ const workerConfig: WorkerConfig = {
       timeout: 5000,
       responseKeyword: '"code":200',
     },
-    {
-      id: 'beszel_main_systems',
-      name: 'Beszel Systems',
-      method: 'GET',
-      target: 'https://beszel-heartbeat.tuannguyenviet.site/status/beszel-main/systems',
-      expectedCodes: [200],
-      timeout: 5000,
-      responseKeyword: 'healthy',
-    },
   ],
   callbacks: {
     async onStatusChange(env, monitor, isUp, timeIncidentStart, timeNow, reason) {
