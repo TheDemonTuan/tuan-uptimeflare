@@ -2,7 +2,9 @@ import { Env } from '.'
 import { MonitorTarget } from '../../types/config'
 import { withTimeout, fetchTimeout } from './util'
 
-const beszelHealthTarget = 'https://beszel.tuannguyenviet.site/api/health'
+// Fleet monitoring hub (Grafana, vps-deploy platform/monitor) behind Cloudflare Access. It reuses the
+// uptimeflare-beszel-hub service token, so the BESZEL_ACCESS_* binding names stay.
+const fleetHealthTarget = 'https://monitor.thedemontuan.dev/api/health'
 
 function isIpAddress(hostname: string): boolean {
   // `URL.hostname` strips brackets for IPv6, so a `:` reliably indicates an IPv6 literal here.
@@ -31,7 +33,7 @@ async function httpResponseBasicCheck(
   code: number,
   bodyReader: () => Promise<string>
 ): Promise<string | null> {
-  const protectedCheck = monitor.id === 'beszel_hub'
+  const protectedCheck = monitor.id === 'fleet_monitor'
   if (monitor.expectedCodes) {
     if (!monitor.expectedCodes.includes(code)) {
       return protectedCheck ? 'Protected check failed' : `Expected codes: ${JSON.stringify(monitor.expectedCodes)}, Got: ${code}`
@@ -262,7 +264,7 @@ export async function getStatus(
     err: 'Unknown',
   }
 
-  const protectedCheck = monitor.id === 'beszel_hub'
+  const protectedCheck = monitor.id === 'fleet_monitor'
   const startTime = Date.now()
 
   if (monitor.method === 'TCP_PING') {
@@ -354,10 +356,10 @@ export async function getStatus(
 export async function doMonitor(monitor: MonitorTarget, defaultLocation: string, env: Env) {
   let checkLocation = defaultLocation
   let status
-  if (monitor.id === 'beszel_hub') {
+  if (monitor.id === 'fleet_monitor') {
     const clientId = env.BESZEL_ACCESS_CLIENT_ID
     const clientSecret = env.BESZEL_ACCESS_CLIENT_SECRET
-    if (monitor.target !== beszelHealthTarget || monitor.checkProxy !== undefined ||
+    if (monitor.target !== fleetHealthTarget || monitor.checkProxy !== undefined ||
         monitor.method !== 'GET' || monitor.body !== undefined || monitor.headers !== undefined ||
         !clientId || !clientSecret) {
       const status = { ping: 0, up: false, err: 'Protected check unavailable' }

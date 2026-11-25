@@ -53,8 +53,8 @@ test('a slow response body cannot hold the scheduled probe open', async () => {
   expect(result.status).toEqual({ up: false, ping: 10, err: 'Timeout after 10ms' })
 })
 
-test('Beszel health requires its own Access token and actual health response', async () => {
-  const hub = byId('beszel_hub')
+test('Fleet monitor health requires its own Access token and actual health response', async () => {
+  const hub = byId('fleet_monitor')
   const sent: string[] = []
   globalThis.fetch = mock(async (url, init) => {
     sent.push(String(url))
@@ -62,7 +62,7 @@ test('Beszel health requires its own Access token and actual health response', a
     const headers = new Headers(init?.headers)
     expect(headers.get('CF-Access-Client-Id')).toBe(env.BESZEL_ACCESS_CLIENT_ID)
     expect(headers.get('CF-Access-Client-Secret')).toBe(env.BESZEL_ACCESS_CLIENT_SECRET)
-    return new Response('{"code":200}', { status: 200 })
+    return new Response('{\n  "database": "ok",\n  "version": "13.3.2"\n}', { status: 200 })
   }) as typeof fetch
   expect((await doMonitor(hub, 'LOCAL', env)).status.up).toBe(true)
   expect((await doMonitor(hub, 'LOCAL', { ...env, BESZEL_ACCESS_CLIENT_SECRET: '' })).status.up).toBe(false)
@@ -85,7 +85,7 @@ test('protected fetch failures cannot expose exception strings', async () => {
   const logs: string[] = []
   console.log = mock((...args) => logs.push(args.join(' ')))
   globalThis.fetch = mock(async () => { throw new Error(env.BESZEL_ACCESS_CLIENT_SECRET) }) as typeof fetch
-  const result = await doMonitor(byId('beszel_hub'), 'LOCAL', env)
+  const result = await doMonitor(byId('fleet_monitor'), 'LOCAL', env)
   expect(result.status.up).toBe(false)
   expect(JSON.stringify(result) + logs.join(' ')).not.toContain(env.BESZEL_ACCESS_CLIENT_SECRET)
 })
@@ -99,13 +99,13 @@ test('Telegram sends only the first DOWN and reports HTTP errors without token',
     return new Response('private-bot-token', { status: 503 })
   }) as typeof fetch
   const notify = workerConfig.callbacks!.onStatusChange!
-  const monitor = byId('beszel_hub')
+  const monitor = byId('fleet_monitor')
   await notify(env, monitor, false, 100, 100, 'Protected check failed')
   await notify(env, monitor, false, 100, 160, 'still down')
   await notify(env, monitor, true, 100, 200, 'OK')
   expect(calls).toHaveLength(1)
   expect(calls[0][0]).toBe('https://api.telegram.org/botprivate-bot-token/sendMessage')
   expect(String(calls[0][1].body)).toContain('chat_id=private-chat')
-  expect(String(calls[0][1].body)).toContain('Beszel+Hub+is+down')
+  expect(String(calls[0][1].body)).toContain('Fleet+Monitor+is+down')
   expect(errors).toEqual(['Telegram notification failed: HTTP 503'])
 })
