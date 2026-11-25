@@ -3,7 +3,7 @@ import nextVitals from 'eslint-config-next/core-web-vitals'
 
 export default defineConfig([
   ...nextVitals,
-  globalIgnores(['.next/**', '.open-next/**', '.tmp/**', 'worker/dist/**', 'next-env.d.ts']),
+  globalIgnores(['.next/**', '.open-next/**', '.tmp/**', 'worker/dist/**', 'web/dist/**', 'next-env.d.ts']),
   {
     files: ['components/**/*.{ts,tsx}', 'pages/_app.tsx', 'pages/_document.tsx', 'util/**/*.{ts,tsx}'],
     rules: {
