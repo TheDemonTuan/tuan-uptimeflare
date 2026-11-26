@@ -79,14 +79,18 @@ const workerConfig: WorkerConfig = {
     },
   ],
   callbacks: {
-    async onStatusChange(env, monitor, isUp, timeIncidentStart, timeNow, reason) {
-      if (isUp || timeIncidentStart !== timeNow) return
+    // Called on every failed check. Alert on the third in a row (the cron runs every minute): one
+    // Cloudflare location's path to the tunnels can stall a check or two while visitors are fine
+    // (EWR, 2026-11-26). Exactly one check lands in the window; ±30 s absorbs cron drift.
+    async onIncident(env, monitor, timeIncidentStart, timeNow, reason) {
+      const downFor = timeNow - timeIncidentStart
+      if (downFor < 90 || downFor >= 150) return
       if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) {
         throw new Error('Telegram Worker secrets are missing')
       }
       const body = new URLSearchParams({
         chat_id: env.TELEGRAM_CHAT_ID,
-        text: `${monitor.name} is down; ${reason}`,
+        text: `${monitor.name} is down (3 checks in a row); ${reason}`,
       })
       try {
         const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {

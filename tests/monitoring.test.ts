@@ -90,7 +90,7 @@ test('protected fetch failures cannot expose exception strings', async () => {
   expect(JSON.stringify(result) + logs.join(' ')).not.toContain(env.BESZEL_ACCESS_CLIENT_SECRET)
 })
 
-test('Telegram sends only the first DOWN and reports HTTP errors without token', async () => {
+test('Telegram sends one DOWN on the third failed check and reports HTTP errors without token', async () => {
   const calls: Array<[string, RequestInit]> = []
   const errors: string[] = []
   console.error = mock((...args) => errors.push(args.join(' ')))
@@ -98,11 +98,16 @@ test('Telegram sends only the first DOWN and reports HTTP errors without token',
     calls.push([String(url), init!])
     return new Response('private-bot-token', { status: 503 })
   }) as typeof fetch
-  const notify = workerConfig.callbacks!.onStatusChange!
+  const notify = workerConfig.callbacks!.onIncident!
   const monitor = byId('fleet_monitor')
-  await notify(env, monitor, false, 100, 100, 'Protected check failed')
-  await notify(env, monitor, false, 100, 160, 'still down')
-  await notify(env, monitor, true, 100, 200, 'OK')
+  // A stall of one or two checks (the EWR noise) stays silent.
+  await notify(env, monitor, 100, 100, 'Protected check failed')
+  await notify(env, monitor, 100, 161, 'Protected check failed')
+  expect(calls).toHaveLength(0)
+  // Third check, a little late, then later checks of the same incident.
+  await notify(env, monitor, 100, 247, 'Protected check failed')
+  await notify(env, monitor, 100, 280, 'still down')
+  await notify(env, monitor, 100, 340, 'still down')
   expect(calls).toHaveLength(1)
   expect(calls[0][0]).toBe('https://api.telegram.org/botprivate-bot-token/sendMessage')
   expect(String(calls[0][1].body)).toContain('chat_id=private-chat')
