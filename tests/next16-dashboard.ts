@@ -107,7 +107,7 @@ async function httpCheck(base: string, scenario: string, authenticated: boolean)
   assert.equal(home.status, scenario === 'malformed' ? 503 : 200)
   const html = await home.text()
   if (scenario === 'healthy' || scenario === 'mixed') {
-    assert(html.includes('9router API'))
+    assert(html.includes('OmniRoute API'))
     assert.match(html, /<html lang="vi"/)
   }
   const snapshotResponse = await request('/api/data?view=dashboard')
