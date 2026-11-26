@@ -36,7 +36,7 @@ jobs:
           bun-version: 1.4.5
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.15.2'
       - name: Install locked dependencies
         run: |
           npm ci
