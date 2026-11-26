@@ -70,7 +70,7 @@ Please refer to [Wiki](https://github.com/lyc8503/UptimeFlare/wiki)
 ## 🚀 Deployment architecture
 
 UptimeFlare deploys as two decoupled Cloudflare Workers sharing a single D1 database:
-- **Monitoring Worker (`uptimeflare_worker`)**: runs every minute via cron, executes probes, records 12-hour latency and 90-day incidents in D1 `uptimeflare_d1`, and triggers first-failure Telegram notifications.
+- **Monitoring Worker (`uptimeflare_worker`)**: runs every minute via cron, executes probes, records 12-hour latency and 90-day incidents in D1 `uptimeflare_d1`, and sends Telegram notifications after three failed checks in a row.
 - **Status Page Worker (`uptimeflare-web`)**: Next.js 16 (Pages Router) running on Cloudflare Workers with `@opennextjs/cloudflare`.
 
 ### Web Authentication
@@ -82,7 +82,7 @@ npx wrangler secret put STATUS_PAGE_AUTH
 Enter credentials in `username:password` format. Omit the secret for a public status page.
 ### Telegram downtime alerts for this deployment
 
-Each monitor sends a Telegram message when a new DOWN incident starts. Recovery and changes to the reason for an already-open incident do not send messages.
+Each monitor sends one Telegram message when an incident reaches its third failed check in a row (about two minutes down). A stall of one or two checks stays on the status page only: one Cloudflare location's path to the tunnels can time out while visitors elsewhere are served. Recovery and changes to the reason for an already-open incident do not send messages.
 
 For rotation, keep `UPTIMEFLARE_TELEGRAM_BOT_TOKEN` and `UPTIMEFLARE_TELEGRAM_CHAT_ID` in central `TheDemonTuan/vps-deploy` secrets. Ordinary version uploads retain the existing `secret_text` bindings without reading or rewriting values. Do not put values in `uptime.config.ts`, source-repository secrets, artifacts, committed files or command arguments. Missing live bindings fail publication rather than silently disabling alerts. A Telegram bot must exist and be allowed to message the chosen chat.
 
