@@ -53,7 +53,7 @@ const workerConfig: WorkerConfig = {
       id: 'mc_hub_posts',
       name: 'MC Hub Public Content API',
       method: 'GET',
-      target: 'https://api.thedemontuan.dev/api/posts?limit=1',
+      target: 'https://thedemontuan.dev/api/posts?limit=1',
       expectedCodes: [200],
       responseKeyword: '"items":[',
       timeout: 5000,
